@@ -1,0 +1,338 @@
+{
+  "id": "Pn8M3kQrZb2WyT5j",
+  "name": "Shopify Monthly SKU Sync v2",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "v2-0001-0000-0000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p-tab",
+              "name": "TAB_NAME",
+              "value": "test",
+              "type": "string"
+            },
+            {
+              "id": "p-start",
+              "name": "MONTH_START_ISO",
+              "value": "2026-03-01T00:00:00+08:00",
+              "type": "string"
+            },
+            {
+              "id": "p-end",
+              "name": "MONTH_END_ISO",
+              "value": "2026-03-31T23:59:59+08:00",
+              "type": "string"
+            },
+            {
+              "id": "p-sheet",
+              "name": "SHEET_ID",
+              "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM",
+              "type": "string"
+            },
+            {
+              "id": "p-api",
+              "name": "SHOPIFY_API_VERSION",
+              "value": "2026-04",
+              "type": "string"
+            },
+            {
+              "id": "p-exclude",
+              "name": "EXCLUDE_SKUS",
+              "value": "free-gfz-spamf-blaster, free-gfz-3deg-riser-rmr, free-gfz-2deg-riser-extended, free-gfz-talon-mag-bumper, free-gfz-3deg-riser-romeo, free-gfz-talon-mag-duo-connector",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "v2-0002-0000-0000-000000000002",
+      "name": "Set Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/oauth/access_token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "client_id",
+              "value": "={{ $env.SHOPIFY_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $env.SHOPIFY_CLIENT_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "v2-0003-0000-0000-000000000003",
+      "name": "Get Shopify Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/api/{{ $('Set Parameters').first().json.SHOPIFY_API_VERSION }}/orders.json?status=any&limit=250&created_at_min={{ encodeURIComponent($('Set Parameters').first().json.MONTH_START_ISO) }}&created_at_max={{ encodeURIComponent($('Set Parameters').first().json.MONTH_END_ISO) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers.link && $response.headers.link.includes('rel=\"next\"') ? $response.headers.link.match(/<([^>]+)>;\\s*rel=\"next\"/)[1] : '' }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}",
+              "limitPagesFetched": false
+            }
+          }
+        }
+      },
+      "id": "v2-0004-0000-0000-000000000004",
+      "name": "Fetch All Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Amount Reference",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "v2-0005-0000-0000-000000000005",
+      "name": "Read Amount Reference",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// v2.1: Match Shopify line items against:\n//   (a) Amount Reference SKU masters (uses master prices, -COLOUR = wildcard), OR\n//   (b) line items whose title/variant_title contains 'gfz' or 'gavin' (uses Shopify\n//       revenue for Listing, leaves Fee/Takehome blank, flags Remarks for review).\n// Emit one row per matching line ITEM (multiple matching SKUs per order = multiple rows).\n//\n// PAGINATION TBD: still single page. Add Link-header cursor before prod for >250 orders.\n\n// --- 1. Build SKU master list from Amount Reference ---\nconst refRows = $input.all().map(it => it.json);\n\nfunction parsePrice(s) {\n  if (s === undefined || s === null || s === '') return 0;\n  const m = String(s).replace(/[$,\\s]/g, '').match(/-?\\d+(?:\\.\\d+)?/);\n  return m ? parseFloat(m[0]) : 0;\n}\nfunction escRegex(s) {\n  return s.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&');\n}\nconst masters = [];\nfor (const r of refRows) {\n  const sku = String(r['SKU'] || '').trim();\n  if (!sku) continue;\n  const listing  = parsePrice(r['Listing Price']);\n  const fee      = parsePrice(r['3DPS + Stripe Fee (3.4%)']);\n  const takehome = parsePrice(r['Gavin Amount (Takehome)']);\n  const pat = sku.includes('COLOUR')\n    ? '^' + escRegex(sku).replace(/COLOUR/g, '.+') + '$'\n    : '^' + escRegex(sku) + '$';\n  masters.push({ sku, listing, fee, takehome, re: new RegExp(pat, 'i') });\n}\nfunction findMaster(actualSku) {\n  if (!actualSku) return null;\n  for (const m of masters) if (m.re.test(actualSku)) return m;\n  return null;\n}\n\n// --- 2a. Exclusion list (comma-separated, supports * wildcard) ---\nconst excludeStr = $('Set Parameters').first().json.EXCLUDE_SKUS || '';\nconst excludeRegexes = excludeStr.split(',').map(s => s.trim()).filter(Boolean).map(pat => {\n  const escaped = escRegex(pat).replace(/\\\\\\*/g, '.*');\n  return new RegExp('^' + escaped + '$', 'i');\n});\nfunction isExcluded(sku) {\n  if (!sku) return false;\n  return excludeRegexes.some(re => re.test(sku));\n}\n\n// --- 2b. Title fallback match: title or variant_title contains 'gfz' or 'gavin' ---\nfunction titleHints(li) {\n  const t = ((li.title || '') + ' ' + (li.variant_title || '')).toLowerCase();\n  return t.includes('gfz') || t.includes('gavin');\n}\n\n// --- 3. Date / currency helpers ---\nconst MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\nfunction fmtDate(iso) {\n  if (!iso) return '';\n  const d = new Date(iso);\n  if (isNaN(d.getTime())) return iso.split('T')[0];\n  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear();\n}\nfunction fmtSGD(n) { return '$' + Number(n).toFixed(2); }\n\n// --- 4. Iterate orders -> rows (across all paginated pages) ---\nconst pages = $('Fetch All Orders').all();\nconst orders = pages.flatMap(p => p.json.orders || []);\nconst rows = [];\n\nfor (const o of orders) {\n  for (const li of (o.line_items || [])) {\n    if (isExcluded(li.sku)) continue;\n    const master    = findMaster(li.sku);\n    const titleHit  = !master && titleHints(li);\n    if (!master && !titleHit) continue;\n\n    const firstName = (o.customer && o.customer.first_name) || '';\n    const lastName  = (o.customer && o.customer.last_name)  || '';\n    const name = (firstName + ' ' + lastName).trim() || 'Guest';\n    const orderNo = o.order_number != null\n      ? String(o.order_number)\n      : String(o.name || '').replace('#','');\n    const qty      = li.quantity || 1;\n\n    let listing, fee, takehome, remarks;\n    if (master) {\n      // Use master prices (unit price; if you want line totals, multiply by qty)\n      listing  = fmtSGD(master.listing);\n      fee      = fmtSGD(master.fee);\n      takehome = fmtSGD(master.takehome);\n      remarks  = '';\n    } else {\n      // Title-only fallback: Shopify revenue for Listing, leave Fee/Takehome blank\n      const liPrice = parseFloat(li.price || 0);\n      listing  = fmtSGD(liPrice * qty);\n      fee      = '';\n      takehome = '';\n      remarks  = 'TITLE MATCH — add to Amount Reference?';\n    }\n\n    rows.push({\n      json: {\n        'Order No.':                orderNo,\n        'Date':                     fmtDate(o.created_at),\n        'Name':                     name,\n        'Email':                    o.email || '',\n        'Gdrive access':            '',\n        'SKU':                      li.sku || '',\n        'Listing Price':            listing,\n        '3DPS+Stripe Fee':          fee,\n        'Gavin Amount (Takehome)':  takehome,\n        'Payment Complete':         '',\n        'Date of Payment':          '',\n        'Remarks':                  remarks,\n      }\n    });\n  }\n}\n\nreturn rows;\n"
+      },
+      "id": "v2-0006-0000-0000-000000000006",
+      "name": "Match SKUs & Build Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.TAB_NAME }}",
+          "mode": "name"
+        },
+        "clear": "specificRange",
+        "startIndex": 2,
+        "rowsToDelete": 0,
+        "options": {}
+      },
+      "id": "v2-0007-0000-0000-000000000007",
+      "name": "Clear Month Tab Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.TAB_NAME }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v2-0008-0000-0000-000000000008",
+      "name": "Append Rows to Month Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1780,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Parameters": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Orders": {
+      "main": [
+        [
+          {
+            "node": "Read Amount Reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Amount Reference": {
+      "main": [
+        [
+          {
+            "node": "Match SKUs & Build Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match SKUs & Build Rows": {
+      "main": [
+        [
+          {
+            "node": "Append Rows to Month Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

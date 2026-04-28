@@ -1,0 +1,37 @@
+{
+  "id": "ShopifyErrHandle1",
+  "name": "Shopify Sync — Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "err-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ai.idealmachinefactory@gmail.com",
+        "toEmail": "changfrancis1985@gmail.com",
+        "subject": "=[Shopify Sync FAILED] {{ $json.workflow.name }} at {{ $json.execution.lastNodeExecuted }}",
+        "emailFormat": "text",
+        "text": "=Shopify monthly sync FAILED.\n\nWorkflow: {{ $json.workflow.name }}\nExecution ID: {{ $json.execution.id }}\nFailed node: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\n\nFull error stack:\n{{ $json.execution.error.stack }}\n\nReview at: http://192.168.100.151:5678/workflow/{{ $json.workflow.id }}/executions",
+        "options": {}
+      },
+      "id": "err-email",
+      "name": "Email Failure Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [460, 300],
+      "credentials": {"smtp": {"id": "rZVW3OpjcVx0cl0b", "name": "SMTP account"}},
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Error Trigger": {"main": [[{"node": "Email Failure Alert", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "tags": []
+}

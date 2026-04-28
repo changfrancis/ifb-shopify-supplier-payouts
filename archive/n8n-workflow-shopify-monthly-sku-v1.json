@@ -1,0 +1,270 @@
+{
+  "name": "Shopify Monthly SKU Sync v1",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9b3a2d10-0001-4000-9000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p-sku",
+              "name": "TARGET_SKU_PATTERNS",
+              "value": "gfz-smiley-bolt-*,gfz-smiley-plunger,sbf-battery,sbf-hwkit,gfz9bcar-*,gfz15bcar-*,sbl2-hwkit-*,sbl2-ex-hwkit,sbl2-3dparts,sbl2-ex-3dparts,gfz-tpu-bumper-worker-3,optic-protector-fic2025,GFZ-MPP-Spring-000,gfz-vesper-bcar,GFZ-SBL2EX-SpringSingle,GFZ-SBL2-SpringSingle,sbf-bp-addon-hardware,sbf-bp-3dparts-only,sbf-3dparts",
+              "type": "string"
+            },
+            {
+              "id": "p-label",
+              "name": "MONTH_LABEL",
+              "value": "={{ $now.toFormat('yyyy-MM MMMM') }}",
+              "type": "string"
+            },
+            {
+              "id": "p-start",
+              "name": "MONTH_START_ISO",
+              "value": "={{ $now.startOf('month').toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "p-end",
+              "name": "MONTH_END_ISO",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "p-sheet",
+              "name": "SHEET_ID",
+              "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM",
+              "type": "string"
+            },
+            {
+              "id": "p-api",
+              "name": "SHOPIFY_API_VERSION",
+              "value": "2026-04",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b3a2d10-0002-4000-9000-000000000002",
+      "name": "Set Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/oauth/access_token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "client_id",
+              "value": "={{ $env.SHOPIFY_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $env.SHOPIFY_CLIENT_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b3a2d10-0003-4000-9000-000000000003",
+      "name": "Get Shopify Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/api/{{ $('Set Parameters').item.json.SHOPIFY_API_VERSION }}/orders.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "any"
+            },
+            {
+              "name": "limit",
+              "value": "250"
+            },
+            {
+              "name": "created_at_min",
+              "value": "={{ $('Set Parameters').item.json.MONTH_START_ISO }}"
+            },
+            {
+              "name": "created_at_max",
+              "value": "={{ $('Set Parameters').item.json.MONTH_END_ISO }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b3a2d10-0004-4000-9000-000000000004",
+      "name": "Fetch Orders (page 1, max 250)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Filter line items to those matching any pattern in TARGET_SKU_PATTERNS.\n// Patterns are comma-separated and case-insensitive.\n// Use '*' as a wildcard, e.g. 'gfz-smiley-bolt-*' matches red/blue/green variants.\n// Emits one row per matching line item (so a single order with 3 different matching SKUs = 3 rows).\n//\n// PAGINATION TBD: currently reads only the first page (max 250 orders/month).\n// For 250-2000 orders/month, add Link-header cursor follow before going to prod.\n\nconst rawPatterns = $('Set Parameters').first().json.TARGET_SKU_PATTERNS || '';\nconst patterns = rawPatterns\n  .split(',')\n  .map(s => s.trim())\n  .filter(Boolean);\n\nfunction globToRegex(pattern) {\n  // Escape regex specials, then turn '*' into '.*'\n  const escaped = pattern.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&').replace(/\\*/g, '.*');\n  return new RegExp('^' + escaped + '$', 'i');\n}\nconst regexes = patterns.map(globToRegex);\n\nfunction matchesAny(sku) {\n  if (!sku) return null;\n  for (let i = 0; i < regexes.length; i++) {\n    if (regexes[i].test(sku)) return patterns[i];\n  }\n  return null;\n}\n\nconst orders = $input.first().json.orders || [];\nconst rows = [];\n\nfor (const o of orders) {\n  for (const li of (o.line_items || [])) {\n    const matchedPattern = matchesAny(li.sku);\n    if (!matchedPattern) continue;\n\n    const firstName = (o.customer && o.customer.first_name) || '';\n    const lastName  = (o.customer && o.customer.last_name)  || '';\n    const customer  = (firstName + ' ' + lastName).trim() || 'Guest';\n    const unitPrice = parseFloat(li.price || 0);\n    const qty       = li.quantity || 0;\n\n    rows.push({\n      json: {\n        order_id:           String(o.id),\n        order_name:         o.name,\n        date:               (o.created_at || '').split('T')[0],\n        customer,\n        email:              o.email || '',\n        financial_status:   o.financial_status || '',\n        fulfillment_status: o.fulfillment_status || 'unfulfilled',\n        sku:                li.sku,\n        matched_pattern:    matchedPattern,\n        product_title:      li.title || '',\n        variant_title:      li.variant_title || '',\n        quantity:           qty,\n        unit_price:         unitPrice,\n        line_total:         Number((unitPrice * qty).toFixed(2)),\n        currency:           o.currency\n      }\n    });\n  }\n}\n\nreturn rows;\n"
+      },
+      "id": "9b3a2d10-0005-4000-9000-000000000005",
+      "name": "Filter & Flatten by SKU",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Set Parameters').first().json.MONTH_LABEL }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "9b3a2d10-0006-4000-9000-000000000006",
+      "name": "Append to Month Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "Google Sheets — IFB SA"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Parameters": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch Orders (page 1, max 250)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Orders (page 1, max 250)": {
+      "main": [
+        [
+          {
+            "node": "Filter & Flatten by SKU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Flatten by SKU": {
+      "main": [
+        [
+          {
+            "node": "Append to Month Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

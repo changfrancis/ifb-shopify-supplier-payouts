@@ -1,0 +1,301 @@
+{
+  "id": "Pn8M3kQrZb2WyT5j",
+  "name": "Shopify Monthly SKU Sync v4",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "v4-trig-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {"field": "cronExpression", "expression": "0 1 1 * *"}
+          ]
+        }
+      },
+      "id": "v4-trig-cron",
+      "name": "Monthly Cron (1st @ 01:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "p-month",   "name": "MONTH_NAME",          "value": "={{ $now.minus({months: 1}).toFormat('LLL yyyy') }}", "type": "string"},
+            {"id": "p-tab",     "name": "TAB_NAME",            "value": "={{ $now.minus({months: 1}).toFormat('LLL yyyy') }} n8n", "type": "string"},
+            {"id": "p-start",   "name": "MONTH_START_ISO",     "value": "={{ $now.minus({months: 1}).startOf('month').toISO() }}", "type": "string"},
+            {"id": "p-end",     "name": "MONTH_END_ISO",       "value": "={{ $now.minus({months: 1}).endOf('month').toISO() }}", "type": "string"},
+            {"id": "p-sheet",   "name": "SHEET_ID",            "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM", "type": "string"},
+            {"id": "p-api",     "name": "SHOPIFY_API_VERSION", "value": "2026-04", "type": "string"},
+            {"id": "p-excl",    "name": "EXCLUDE_SKUS",        "value": "free-gfz-spamf-blaster, free-gfz-3deg-riser-rmr, free-gfz-2deg-riser-extended, free-gfz-talon-mag-bumper, free-gfz-3deg-riser-romeo, free-gfz-talon-mag-duo-connector, blu-barrel-24-black, d2-sbl2-deskmat-3060, d2-sbl1-deskmat-3060", "type": "string"},
+            {"id": "p-walkin",  "name": "WALKIN_SHEET_ID",     "value": "1X0Ddth8Uc05eVn7KEvJJR6nAkqeysPmVXhse3hQjHQU", "type": "string"},
+            {"id": "p-walgid",  "name": "WALKIN_GID",          "value": "1042018015", "type": "string"},
+            {"id": "p-log",     "name": "RUN_LOG_TAB",         "value": "Run Log", "type": "string"},
+            {"id": "p-email",   "name": "NOTIFY_EMAIL",        "value": "changfrancis1985@gmail.com", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "v4-set-params",
+      "name": "Set Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 290]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/oauth/access_token",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "grant_type",    "value": "client_credentials"},
+            {"name": "client_id",     "value": "={{ $env.SHOPIFY_CLIENT_ID }}"},
+            {"name": "client_secret", "value": "={{ $env.SHOPIFY_CLIENT_SECRET }}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "v4-shopify-token",
+      "name": "Get Shopify Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 290]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/api/{{ $('Set Parameters').first().json.SHOPIFY_API_VERSION }}/orders.json?status=any&limit=250&created_at_min={{ encodeURIComponent($('Set Parameters').first().json.MONTH_START_ISO) }}&created_at_max={{ encodeURIComponent($('Set Parameters').first().json.MONTH_END_ISO) }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "X-Shopify-Access-Token", "value": "={{ $('Get Shopify Token').first().json.access_token }}"}]},
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers.link && $response.headers.link.includes('rel=\"next\"') ? $response.headers.link.match(/<([^>]+)>;\\s*rel=\"next\"/)[1] : '' }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}",
+              "limitPagesFetched": false
+            }
+          },
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "v4-fetch-orders",
+      "name": "Fetch All Orders (paginated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 290]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.WALKIN_SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Gavin Amount Reference", "mode": "name"},
+        "options": {}
+      },
+      "id": "v4-read-ref",
+      "name": "Read Amount Reference",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1100, 290],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.WALKIN_SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.MONTH_NAME }}", "mode": "name"},
+        "options": {}
+      },
+      "id": "v4-read-walkin",
+      "name": "Read Walkin Source",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1320, 290],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "sheet",
+        "operation": "create",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "title": "={{ $('Set Parameters').first().json.TAB_NAME }}",
+        "options": {}
+      },
+      "id": "v4-create-month-tab",
+      "name": "Create Month Tab (if missing)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1540, 200],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "sheet",
+        "operation": "create",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "title": "={{ $('Set Parameters').first().json.RUN_LOG_TAB }}",
+        "options": {}
+      },
+      "id": "v4-create-runlog-tab",
+      "name": "Create Run Log Tab (if missing)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1540, 380],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.TAB_NAME }}", "mode": "name"},
+        "options": {}
+      },
+      "id": "v4-read-dest",
+      "name": "Read Existing Destination Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1760, 290],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ v4 Match SKUs & Build Rows ============\n// Combines Shopify orders + Walkin CSV, applies filters, validations,\n// dedupes against existing destination, emits rows to append.\n\n// ----- helpers -----\nfunction parsePrice(s) {\n  if (s === undefined || s === null || s === '') return 0;\n  const m = String(s).replace(/[$,\\s]/g, '').match(/-?\\d+(?:\\.\\d+)?/);\n  return m ? parseFloat(m[0]) : 0;\n}\nfunction escRegex(s) { return s.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&'); }\nfunction fmtSGD(n) { return '$' + Number(n).toFixed(2); }\nconst MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\nconst MON_NUM = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};\nfunction fmtDate(d) { if (!d || isNaN(d.getTime())) return ''; return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear(); }\nfunction parseDMmmYyyy(s) {\n  const m = String(s || '').trim().match(/^(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+(\\d{4})$/);\n  if (!m) return null;\n  return new Date(m[3] + '-' + MON_NUM[m[2]] + '-' + m[1].padStart(2, '0') + 'T00:00:00+08:00');\n}\nfunction parseCsvLine(line) {\n  const out = []; let cur = ''; let inQ = false;\n  for (let i = 0; i < line.length; i++) {\n    const c = line[i];\n    if (inQ) {\n      if (c === '\"' && line[i+1] === '\"') { cur += '\"'; i++; }\n      else if (c === '\"') inQ = false;\n      else cur += c;\n    } else {\n      if (c === ',') { out.push(cur); cur = ''; }\n      else if (c === '\"') inQ = true;\n      else cur += c;\n    }\n  }\n  out.push(cur);\n  return out;\n}\n\n// ----- Amount Reference -----\nconst refRows = $('Read Amount Reference').all().map(it => it.json);\nconst masters = [];\nfor (const r of refRows) {\n  const sku = String(r['SKU'] || '').trim();\n  if (!sku) continue;\n  const listing  = parsePrice(r['Listing Price']);\n  const fee      = parsePrice(r['3DPS + Stripe Fee (3.4%)']);\n  const takehome = parsePrice(r['Gavin Amount (Takehome)']);\n  const pat = '^' + escRegex(sku).replace(/COLOUR|XXX/g, '.+') + '$';\n  masters.push({ sku, listing, fee, takehome, re: new RegExp(pat, 'i') });\n}\nfunction findMaster(sku) {\n  if (!sku) return null;\n  for (const m of masters) if (m.re.test(sku)) return m;\n  return null;\n}\n\n// ----- Exclusion regexes -----\nconst excludeStr = $('Set Parameters').first().json.EXCLUDE_SKUS || '';\nconst excludeRegexes = excludeStr.split(',').map(s => s.trim()).filter(Boolean).map(p =>\n  new RegExp('^' + escRegex(p).replace(/\\\\\\\\\\*/g, '.*') + '$', 'i')\n);\nfunction isExcluded(sku) { return sku && excludeRegexes.some(re => re.test(sku)); }\nfunction titleHints(li) {\n  const t = ((li.title || '') + ' ' + (li.variant_title || '')).toLowerCase();\n  return t.includes('gfz') || t.includes('gavin') || t.includes('sbl') || t.includes('sbf');\n}\n\n// ----- Existing dest rows for dedup -----\nconst existingItems = $input.all();\nconst existingRows = existingItems.map(it => it.json).filter(r => r && Object.keys(r).length > 0);\nconst existingKeys = new Set();\nfor (const r of existingRows) {\n  const k = String(r['Order No.'] || '').trim() + '|' + String(r['SKU'] || '').trim();\n  if (k !== '|') existingKeys.add(k);\n}\nconst isFirstRun = existingRows.length === 0;\n\n// ----- Stats accumulator -----\nconst stats = {\n  shopify_orders: 0,\n  shopify_line_items: 0,\n  rows_built: 0,\n  duplicates_skipped: 0,\n  flagged_currency: 0,\n  flagged_refund: 0,\n  flagged_underprice: 0,\n  flagged_title_match: 0,\n  walkin_rows_total: 0,\n  walkin_rows_in_month: 0,\n  walkin_deduped_against_shopify: 0,\n};\n\n// Track Shopify order numbers for Walkin dedup-merge (knowledge transfer rule: matches v5)\nconst shopifyOrderNoSet = new Set();\n\n// ----- Shopify orders -----\nconst pages = $('Fetch All Orders (paginated)').all();\nconst orders = pages.flatMap(p => p.json.orders || []);\nstats.shopify_orders = orders.length;\n\nconst monthStart = new Date($('Set Parameters').first().json.MONTH_START_ISO);\nconst monthEnd   = new Date($('Set Parameters').first().json.MONTH_END_ISO);\n\nconst outRows = [];\nfor (const o of orders) {\n  for (const li of (o.line_items || [])) {\n    stats.shopify_line_items++;\n    if (isExcluded(li.sku)) continue;\n    const master = findMaster(li.sku);\n    const titleHit = !master && titleHints(li);\n    if (!master && !titleHit) continue;\n\n    const flags = [];\n    const orderCcy = (o.currency || '').toUpperCase();\n    if (orderCcy !== 'SGD') {\n      flags.push('CURRENCY: ' + (o.currency || 'unknown'));\n      stats.flagged_currency++;\n    }\n    if (Array.isArray(o.refunds) && o.refunds.length > 0) {\n      flags.push('REFUND - verify');\n      stats.flagged_refund++;\n    }\n\n    const firstName = (o.customer && o.customer.first_name) || '';\n    const lastName  = (o.customer && o.customer.last_name)  || '';\n    const name = (firstName + ' ' + lastName).trim() || 'Guest';\n    const orderNo = o.order_number != null ? String(o.order_number) : String(o.name || '').replace('#','');\n    shopifyOrderNoSet.add(orderNo);\n    const dateFmt = fmtDate(new Date(o.created_at));\n    const email   = o.email || '';\n    const qty     = li.quantity || 1;\n\n    const liShopPrice = li.price_set && li.price_set.shop_money\n      ? parseFloat(li.price_set.shop_money.amount || 0)\n      : parseFloat(li.price || 0);\n\n    let listing, fee, takehome;\n    if (master) {\n      if (liShopPrice < master.listing - 0.01) {\n        flags.push('UNDERPRICED: shopify=$' + liShopPrice.toFixed(2) + ' listed=$' + master.listing.toFixed(2));\n        stats.flagged_underprice++;\n        listing  = liShopPrice;\n        fee      = master.fee;\n        takehome = liShopPrice - master.fee;\n      } else {\n        listing  = master.listing;\n        fee      = master.fee;\n        takehome = master.takehome;\n      }\n    } else {\n      flags.push('TITLE MATCH - add to Amount Reference?');\n      stats.flagged_title_match++;\n      listing  = liShopPrice;\n      fee      = null;\n      takehome = null;\n    }\n\n    // Emit qty rows (one per unit)\n    for (let i = 0; i < qty; i++) {\n      const key = orderNo + '|' + (li.sku || '');\n      if (existingKeys.has(key)) { stats.duplicates_skipped++; continue; }\n      outRows.push({\n        'Order No.':                orderNo,\n        'Date':                     dateFmt,\n        'Name':                     name,\n        'Email':                    email,\n        'Gdrive access':            '',\n        'SKU':                      li.sku || '',\n        'Listing Price':            fmtSGD(listing),\n        '3DPS+Stripe Fee':          fee !== null ? fmtSGD(fee) : '',\n        'Gavin Amount (Takehome)':  takehome !== null ? fmtSGD(takehome) : '',\n        'Payment Complete':         '',\n        'Date of Payment':          '',\n        'Remarks':                  flags.join(' | '),\n      });\n      stats.rows_built++;\n    }\n  }\n}\n\n// ----- Walkin source (n8n Sheets node, one tab per month) -----\nconst walkinItems = $('Read Walkin Source').all().map(it => it.json).filter(j => j && Object.keys(j).length > 0);\nfunction wf(r, names) {\n  for (const n of names) if (r[n] !== undefined && r[n] !== null && r[n] !== '') return r[n];\n  return '';\n}\nfunction toSgdStr(v) {\n  if (v === null || v === undefined || v === '') return '';\n  if (typeof v === 'number') return '$' + v.toFixed(2);\n  const s = String(v).trim();\n  if (s.startsWith('$') || s.startsWith('-$')) return s;\n  if (/^-?\\d+(\\.\\d+)?$/.test(s)) return '$' + parseFloat(s).toFixed(2);\n  return s;\n}\nfor (const r of walkinItems) {\n  stats.walkin_rows_total++;\n  const dateStr = String(wf(r, ['Date']) || '').trim();\n  const dateObj = parseDMmmYyyy(dateStr);\n  if (!dateObj) continue;\n  if (dateObj < monthStart || dateObj > monthEnd) continue;\n  stats.walkin_rows_in_month++;\n  const orderNo = String(wf(r, ['OrderNo.', 'Order No.', 'OrderNo'])).trim();\n  const sku     = String(wf(r, ['SKU'])).trim();\n  if (orderNo && shopifyOrderNoSet.has(orderNo)) { stats.walkin_deduped_against_shopify++; continue; }\n  const key     = orderNo + '|' + sku;\n  if (existingKeys.has(key)) { stats.duplicates_skipped++; continue; }\n  outRows.push({\n    'Order No.':                orderNo,\n    'Date':                     dateStr,\n    'Name':                     String(wf(r, ['Name'])),\n    'Email':                    String(wf(r, ['Email'])),\n    'Gdrive access':            String(wf(r, ['Gdrive access'])),\n    'SKU':                      sku,\n    'Listing Price':            toSgdStr(wf(r, ['Listing Price'])),\n    '3DPS+Stripe Fee':          toSgdStr(wf(r, ['3DPS + Stripe Fee (3.4%)', '3DPS+Stripe Fee', '3DPS + Stripe Fee'])),\n    'Gavin Amount (Takehome)':  toSgdStr(wf(r, ['Gavin Amount (Takehome)'])),\n    'Payment Complete':         String(wf(r, ['Payment Complete'])),\n    'Date of Payment':          String(wf(r, ['Date of Payment'])),\n    'Remarks':                  String(wf(r, ['Remarks'])),\n  });\n  stats.rows_built++;\n}\n\n// ----- Sort combined rows by Date ascending so Walkin interleaves with Shopify by date -----\nfunction dateKey(s) {\n  const d = parseDMmmYyyy(s);\n  return d ? d.getTime() : 0;\n}\noutRows.sort((a, b) => dateKey(a['Date']) - dateKey(b['Date']));\n\n// ----- Return clean data rows. autoMap append seeds row 1 headers from keys. -----\nreturn outRows.map(r => ({ json: r }));\n"
+      },
+      "id": "v4-match",
+      "name": "Match SKUs & Build Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 290],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.TAB_NAME }}", "mode": "name"},
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v4-append-rows",
+      "name": "Append Rows to Month Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2200, 290],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}}
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Derive stats from raw sources + Match output.\nconst matchItems = $('Match SKUs & Build Rows').all().map(it => it.json).filter(j => j && j['Order No.'] !== undefined);\nconst orders = $('Fetch All Orders (paginated)').all().flatMap(p => p.json.orders || []);\nconst shopifyLineItems = orders.reduce((acc, o) => acc + ((o.line_items || []).length), 0);\n\nconst walkinTotal = $('Read Walkin Source').all().filter(it => it.json && Object.keys(it.json).length > 0).length;\n\nfunction countFlag(needle) {\n  return matchItems.filter(r => (r['Remarks'] || '').includes(needle)).length;\n}\n\nconst params = $('Set Parameters').first().json;\nconst now = new Date();\nconst pad = n => String(n).padStart(2, '0');\nconst tsStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) +\n              ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());\n\n// walkin_in_month: count of rows in matchItems whose Order No. == 'Walkin'\nconst walkinInMonth = matchItems.filter(r => String(r['Order No.'] || '').toLowerCase() === 'walkin').length;\n\nreturn [{ json: {\n  'timestamp':              tsStr,\n  'tab':                    params.TAB_NAME,\n  'shopify_orders':         orders.length,\n  'shopify_line_items':     shopifyLineItems,\n  'walkin_total':           walkinTotal,\n  'walkin_in_month':        walkinInMonth,\n  'new_rows':               matchItems.length,\n  'flagged_currency':       countFlag('CURRENCY'),\n  'flagged_refund':         countFlag('REFUND'),\n  'flagged_underprice':     countFlag('UNDERPRICED'),\n  'flagged_title_match':    countFlag('TITLE MATCH'),\n  'status':                 'success'\n}}];\n"
+      },
+      "id": "v4-build-log",
+      "name": "Build Run Log Entry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 290]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.RUN_LOG_TAB }}", "mode": "name"},
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v4-append-log",
+      "name": "Append to Run Log Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2640, 290],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}}
+    },
+    {
+      "parameters": {
+        "fromEmail": "ai.idealmachinefactory@gmail.com",
+        "toEmail": "={{ $('Set Parameters').first().json.NOTIFY_EMAIL }}",
+        "subject": "=[Shopify Sync] {{ $('Set Parameters').first().json.TAB_NAME }} — {{ $('Build Run Log Entry').first().json.new_rows }} new rows",
+        "emailFormat": "text",
+        "text": "=Shopify monthly sync completed.\n\nTab: {{ $('Set Parameters').first().json.TAB_NAME }}\nRun timestamp: {{ $('Build Run Log Entry').first().json.timestamp }}\n\n— Counts —\nShopify orders fetched: {{ $('Build Run Log Entry').first().json.shopify_orders }}\nShopify line items: {{ $('Build Run Log Entry').first().json.shopify_line_items }}\nWalkin total in source: {{ $('Build Run Log Entry').first().json.walkin_total }}\nWalkin in target month: {{ $('Build Run Log Entry').first().json.walkin_in_month }}\nNew rows appended: {{ $('Build Run Log Entry').first().json.new_rows }}\n\n— Flags requiring review (also visible in Remarks column) —\nCurrency mismatch: {{ $('Build Run Log Entry').first().json.flagged_currency }}\nRefund detected: {{ $('Build Run Log Entry').first().json.flagged_refund }}\nUnderpriced: {{ $('Build Run Log Entry').first().json.flagged_underprice }}\nTitle match (no Amount Reference entry): {{ $('Build Run Log Entry').first().json.flagged_title_match }}\n\nSheet: https://docs.google.com/spreadsheets/d/{{ $('Set Parameters').first().json.SHEET_ID }}/edit",
+        "options": {}
+      },
+      "id": "v4-email-success",
+      "name": "Email Success Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2860, 290],
+      "credentials": {"smtp": {"id": "rZVW3OpjcVx0cl0b", "name": "SMTP account"}},
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Manual Trigger":                  { "main": [[ { "node": "Set Parameters", "type": "main", "index": 0 } ]] },
+    "Monthly Cron (1st @ 01:00)":      { "main": [[ { "node": "Set Parameters", "type": "main", "index": 0 } ]] },
+    "Set Parameters":                  { "main": [[ { "node": "Get Shopify Token", "type": "main", "index": 0 } ]] },
+    "Get Shopify Token":               { "main": [[ { "node": "Fetch All Orders (paginated)", "type": "main", "index": 0 } ]] },
+    "Fetch All Orders (paginated)":    { "main": [[ { "node": "Read Amount Reference", "type": "main", "index": 0 } ]] },
+    "Read Amount Reference":           { "main": [[ { "node": "Read Walkin Source", "type": "main", "index": 0 } ]] },
+    "Read Walkin Source":                 { "main": [[ { "node": "Create Month Tab (if missing)", "type": "main", "index": 0 } ]] },
+    "Create Month Tab (if missing)": { "main": [[ { "node": "Create Run Log Tab (if missing)", "type": "main", "index": 0 } ]] },
+    "Create Run Log Tab (if missing)": { "main": [[ { "node": "Read Existing Destination Rows", "type": "main", "index": 0 } ]] },
+    "Read Existing Destination Rows":  { "main": [[ { "node": "Match SKUs & Build Rows", "type": "main", "index": 0 } ]] },
+    "Match SKUs & Build Rows":         { "main": [[ { "node": "Append Rows to Month Tab", "type": "main", "index": 0 } ]] },
+    "Append Rows to Month Tab":        { "main": [[ { "node": "Build Run Log Entry", "type": "main", "index": 0 } ]] },
+    "Build Run Log Entry":             { "main": [[ { "node": "Append to Run Log Tab", "type": "main", "index": 0 } ]] },
+    "Append to Run Log Tab":           { "main": [[ { "node": "Email Success Summary", "type": "main", "index": 0 } ]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Singapore",
+    "errorWorkflow": "ShopifyErrHandle1"
+  },
+  "tags": []
+}

@@ -1,0 +1,219 @@
+{
+  "id": "Pn8M3kQrZb2WyT5j",
+  "name": "Shopify Monthly SKU Sync v3",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "v3-trig-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 220]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 1 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "v3-trig-cron",
+      "name": "Monthly Cron (1st @ 01:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 380]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "p-tab",   "name": "TAB_NAME",            "value": "test", "type": "string"},
+            {"id": "p-start", "name": "MONTH_START_ISO",     "value": "2026-03-01T00:00:00+08:00", "type": "string"},
+            {"id": "p-end",   "name": "MONTH_END_ISO",       "value": "2026-03-31T23:59:59+08:00", "type": "string"},
+            {"id": "p-sheet", "name": "SHEET_ID",            "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM", "type": "string"},
+            {"id": "p-api",   "name": "SHOPIFY_API_VERSION", "value": "2026-04", "type": "string"},
+            {"id": "p-excl",  "name": "EXCLUDE_SKUS",        "value": "free-gfz-spamf-blaster, free-gfz-3deg-riser-rmr, free-gfz-2deg-riser-extended, free-gfz-talon-mag-bumper, free-gfz-3deg-riser-romeo, free-gfz-talon-mag-duo-connector", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "v3-set-params",
+      "name": "Set Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/oauth/access_token",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "grant_type",    "value": "client_credentials"},
+            {"name": "client_id",     "value": "={{ $env.SHOPIFY_CLIENT_ID }}"},
+            {"name": "client_secret", "value": "={{ $env.SHOPIFY_CLIENT_SECRET }}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "v3-get-token",
+      "name": "Get Shopify Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/api/{{ $('Set Parameters').first().json.SHOPIFY_API_VERSION }}/orders.json?status=any&limit=250&created_at_min={{ encodeURIComponent($('Set Parameters').first().json.MONTH_START_ISO) }}&created_at_max={{ encodeURIComponent($('Set Parameters').first().json.MONTH_END_ISO) }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "X-Shopify-Access-Token", "value": "={{ $('Get Shopify Token').first().json.access_token }}"}]},
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers.link && $response.headers.link.includes('rel=\"next\"') ? $response.headers.link.match(/<([^>]+)>;\\s*rel=\"next\"/)[1] : '' }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}",
+              "limitPagesFetched": false
+            }
+          }
+        }
+      },
+      "id": "v3-fetch-orders",
+      "name": "Fetch All Orders (paginated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Amount Reference", "mode": "name"},
+        "options": {}
+      },
+      "id": "v3-read-ref",
+      "name": "Read Amount Reference",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1120, 300],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}}
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Match Shopify line items against Amount Reference SKU masters (with -COLOUR wildcard)\n// + title fallback (gfz/gavin in title or variant_title), respecting EXCLUDE_SKUS.\n// Output one row per matching line item in the 12-column Mar 2026 schema.\n\nconst refRows = $input.all().map(it => it.json);\n\nfunction parsePrice(s) {\n  if (s === undefined || s === null || s === '') return 0;\n  const m = String(s).replace(/[$,\\s]/g, '').match(/-?\\d+(?:\\.\\d+)?/);\n  return m ? parseFloat(m[0]) : 0;\n}\nfunction escRegex(s) { return s.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&'); }\n\nconst masters = [];\nfor (const r of refRows) {\n  const sku = String(r['SKU'] || '').trim();\n  if (!sku) continue;\n  const listing  = parsePrice(r['Listing Price']);\n  const fee      = parsePrice(r['3DPS + Stripe Fee (3.4%)']);\n  const takehome = parsePrice(r['Gavin Amount (Takehome)']);\n  const pat = sku.includes('COLOUR')\n    ? '^' + escRegex(sku).replace(/COLOUR/g, '.+') + '$'\n    : '^' + escRegex(sku) + '$';\n  masters.push({ sku, listing, fee, takehome, re: new RegExp(pat, 'i') });\n}\nfunction findMaster(sku) {\n  if (!sku) return null;\n  for (const m of masters) if (m.re.test(sku)) return m;\n  return null;\n}\n\nconst excludeStr = $('Set Parameters').first().json.EXCLUDE_SKUS || '';\nconst excludeRegexes = excludeStr.split(',').map(s => s.trim()).filter(Boolean).map(pat => {\n  return new RegExp('^' + escRegex(pat).replace(/\\\\\\*/g, '.*') + '$', 'i');\n});\nfunction isExcluded(sku) {\n  if (!sku) return false;\n  return excludeRegexes.some(re => re.test(sku));\n}\n\nfunction titleHints(li) {\n  const t = ((li.title || '') + ' ' + (li.variant_title || '')).toLowerCase();\n  return t.includes('gfz') || t.includes('gavin');\n}\n\nconst MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\nfunction fmtDate(iso) {\n  if (!iso) return '';\n  const d = new Date(iso);\n  if (isNaN(d.getTime())) return iso.split('T')[0];\n  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear();\n}\nfunction fmtSGD(n) { return '$' + Number(n).toFixed(2); }\n\nconst pages = $('Fetch All Orders (paginated)').all();\nconst orders = pages.flatMap(p => p.json.orders || []);\nconst rows = [];\n\nfor (const o of orders) {\n  for (const li of (o.line_items || [])) {\n    if (isExcluded(li.sku)) continue;\n    const m = findMaster(li.sku);\n    const titleHit = !m && titleHints(li);\n    if (!m && !titleHit) continue;\n\n    const firstName = (o.customer && o.customer.first_name) || '';\n    const lastName  = (o.customer && o.customer.last_name)  || '';\n    const name = (firstName + ' ' + lastName).trim() || 'Guest';\n    const orderNo = o.order_number != null ? String(o.order_number) : String(o.name || '').replace('#','');\n    const qty = li.quantity || 1;\n\n    let listing, fee, takehome, remarks;\n    if (m) {\n      listing  = fmtSGD(m.listing);\n      fee      = fmtSGD(m.fee);\n      takehome = fmtSGD(m.takehome);\n      remarks  = '';\n    } else {\n      const liPrice = parseFloat(li.price || 0);\n      listing  = fmtSGD(liPrice * qty);\n      fee      = '';\n      takehome = '';\n      remarks  = 'TITLE MATCH - add to Amount Reference?';\n    }\n\n    rows.push({\n      json: {\n        'Order No.':                orderNo,\n        'Date':                     fmtDate(o.created_at),\n        'Name':                     name,\n        'Email':                    o.email || '',\n        'Gdrive access':            '',\n        'SKU':                      li.sku || '',\n        'Listing Price':            listing,\n        '3DPS+Stripe Fee':          fee,\n        'Gavin Amount (Takehome)':  takehome,\n        'Payment Complete':         '',\n        'Date of Payment':          '',\n        'Remarks':                  remarks,\n      }\n    });\n  }\n}\n\nreturn rows;\n"
+      },
+      "id": "v3-match",
+      "name": "Match SKUs & Build Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('Set Parameters').first().json.SHEET_ID }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"requests\": [\n    { \"addSheet\": { \"properties\": { \"title\": \"{{ $('Set Parameters').first().json.TAB_NAME }}\" }}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "v3-create-tab",
+      "name": "Create Month Tab (if missing)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 220],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('Set Parameters').first().json.SHEET_ID }}/values/{{ encodeURIComponent(\"'\" + $('Set Parameters').first().json.TAB_NAME + \"'!A1\") }}?valueInputOption=USER_ENTERED",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"values\": [[\"Order No.\",\"Date\",\"Name\",\"Email\",\"Gdrive access\",\"SKU\",\"Listing Price\",\"3DPS+Stripe Fee\",\"Gavin Amount (Takehome)\",\"Payment Complete\",\"Date of Payment\",\"Remarks\"]]\n}",
+        "options": {}
+      },
+      "id": "v3-write-headers",
+      "name": "Write Headers (idempotent)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 220],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('Set Parameters').first().json.SHEET_ID }}/values/{{ encodeURIComponent(\"'\" + $('Set Parameters').first().json.TAB_NAME + \"'!A2:L\") }}:clear",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "v3-clear",
+      "name": "Clear Data Range A2:L",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 220],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.TAB_NAME }}", "mode": "name"},
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v3-append",
+      "name": "Append Rows to Month Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2220, 300],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}}
+    }
+  ],
+  "connections": {
+    "Manual Trigger":              { "main": [[ { "node": "Set Parameters", "type": "main", "index": 0 } ]] },
+    "Monthly Cron (1st @ 01:00)":  { "main": [[ { "node": "Set Parameters", "type": "main", "index": 0 } ]] },
+    "Set Parameters":              { "main": [[ { "node": "Get Shopify Token", "type": "main", "index": 0 } ]] },
+    "Get Shopify Token":           { "main": [[ { "node": "Fetch All Orders (paginated)", "type": "main", "index": 0 } ]] },
+    "Fetch All Orders (paginated)":{ "main": [[ { "node": "Read Amount Reference", "type": "main", "index": 0 } ]] },
+    "Read Amount Reference":       { "main": [[ { "node": "Match SKUs & Build Rows", "type": "main", "index": 0 } ]] },
+    "Match SKUs & Build Rows":     { "main": [[ { "node": "Create Month Tab (if missing)", "type": "main", "index": 0 } ]] },
+    "Create Month Tab (if missing)": { "main": [[ { "node": "Write Headers (idempotent)", "type": "main", "index": 0 } ]] },
+    "Write Headers (idempotent)":  { "main": [[ { "node": "Clear Data Range A2:L", "type": "main", "index": 0 } ]] },
+    "Clear Data Range A2:L":       { "main": [[ { "node": "Append Rows to Month Tab", "type": "main", "index": 0 } ]] }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "tags": []
+}

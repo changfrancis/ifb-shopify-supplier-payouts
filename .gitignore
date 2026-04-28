@@ -1,0 +1,34 @@
+# Service account credentials — NEVER commit
+*.json.key
+ifb-n8n-integration-*.json
+**/sa.json
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# Backups
+*.bak
+*.pre-*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / tmp from CLI runs
+*.log
+exec_*.log
+/tmp/
