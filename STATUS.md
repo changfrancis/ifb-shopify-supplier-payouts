@@ -73,9 +73,13 @@ Production validation when **June 1, 2026 02:00 SGT** cron fires. Verify:
 
 ## Open carryover items
 
-- **Vitae**: fill in `Vitae Amount Reference ` listing/fee/takehome columns
-- **Add `read_all_orders` scope** to Shopify app (Dev Dashboard → new version → uninstall/reinstall). Without this, Shopify API only returns last ~60 days. Affects historical backfills (Jan/Feb 2026 returned 0).
-- **Rotate `changfrancis` DSM password** (was leaked early in chat).
+- **Vitae**: fill in `Vitae Amount Reference ` listing/fee/takehome columns. Until then, draft rows show Shopify sale price + yellow flag.
+- **Cosmetic**: delete v1 + v4 workflows from n8n UI (3 clicks each). Both are already deactivated and won't fire — purely tidiness.
+
+## Resolved (was carryover)
+
+- ✅ **Shopify `read_all_orders` scope** granted (verified — Jan 2026 now accessible). Granted scopes on token: `read_all_orders, read_customers, read_orders, read_products`.
+- ⏸️ **DSM password rotation** — deferred. Other projects are using the same credential during testing; revisit later.
 
 ## Anchors
 
