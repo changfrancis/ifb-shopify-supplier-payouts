@@ -28,10 +28,10 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            {"id": "p-month",   "name": "MONTH_NAME",          "value": "={{ $now.minus({months: 1}).toFormat('LLL yyyy') }}", "type": "string"},
-            {"id": "p-tab",     "name": "TAB_NAME",            "value": "={{ $now.minus({months: 1}).toFormat('LLL yyyy') }} n8n", "type": "string"},
-            {"id": "p-start",   "name": "MONTH_START_ISO",     "value": "={{ $now.minus({months: 1}).startOf('month').toISO() }}", "type": "string"},
-            {"id": "p-end",     "name": "MONTH_END_ISO",       "value": "={{ $now.minus({months: 1}).endOf('month').toISO() }}", "type": "string"},
+            {"id": "p-month",   "name": "MONTH_NAME",          "value": "={{ $env.OVERRIDE_MONTH_NAME || $now.minus({months: 1}).toFormat('LLL yyyy') }}", "type": "string"},
+            {"id": "p-tab",     "name": "TAB_NAME",            "value": "={{ ($env.OVERRIDE_MONTH_NAME || $now.minus({months: 1}).toFormat('LLL yyyy')) + ' Gavin n8n' }}", "type": "string"},
+            {"id": "p-start",   "name": "MONTH_START_ISO",     "value": "={{ $env.OVERRIDE_MONTH_START_ISO || $now.minus({months: 1}).startOf('month').toISO() }}", "type": "string"},
+            {"id": "p-end",     "name": "MONTH_END_ISO",       "value": "={{ $env.OVERRIDE_MONTH_END_ISO || $now.minus({months: 1}).endOf('month').toISO() }}", "type": "string"},
             {"id": "p-sheet",   "name": "SHEET_ID",            "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM", "type": "string"},
             {"id": "p-api",     "name": "SHOPIFY_API_VERSION", "value": "2026-04", "type": "string"},
             {"id": "p-excl",    "name": "EXCLUDE_SKUS",        "value": "free-gfz-spamf-blaster, free-gfz-3deg-riser-rmr, free-gfz-2deg-riser-extended, free-gfz-talon-mag-bumper, free-gfz-3deg-riser-romeo, free-gfz-talon-mag-duo-connector, blu-barrel-24-black, d2-sbl2-deskmat-3060, d2-sbl1-deskmat-3060", "type": "string"},
