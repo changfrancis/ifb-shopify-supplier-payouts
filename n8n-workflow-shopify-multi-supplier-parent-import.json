@@ -24,10 +24,10 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            {"id": "p-month",     "name": "MONTH_NAME",          "value": "={{ $now.minus({months: 1}).toFormat('LLL yyyy') }}", "type": "string"},
-            {"id": "p-month-yy",  "name": "MONTH_NAME_YY",       "value": "={{ $now.minus({months: 1}).toFormat('LLL yy') }}",   "type": "string"},
-            {"id": "p-start",     "name": "MONTH_START_ISO",     "value": "={{ $now.minus({months: 1}).startOf('month').toISO() }}", "type": "string"},
-            {"id": "p-end",       "name": "MONTH_END_ISO",       "value": "={{ $now.minus({months: 1}).endOf('month').toISO() }}",   "type": "string"},
+            {"id": "p-month",     "name": "MONTH_NAME",          "value": "={{ $env.OVERRIDE_MONTH_NAME || $now.minus({months: 1}).toFormat('LLL yyyy') }}", "type": "string"},
+            {"id": "p-month-yy",  "name": "MONTH_NAME_YY",       "value": "={{ $env.OVERRIDE_MONTH_NAME_YY || $now.minus({months: 1}).toFormat('LLL yy') }}",   "type": "string"},
+            {"id": "p-start",     "name": "MONTH_START_ISO",     "value": "={{ $env.OVERRIDE_MONTH_START_ISO || $now.minus({months: 1}).startOf('month').toISO() }}", "type": "string"},
+            {"id": "p-end",       "name": "MONTH_END_ISO",       "value": "={{ $env.OVERRIDE_MONTH_END_ISO || $now.minus({months: 1}).endOf('month').toISO() }}",   "type": "string"},
             {"id": "p-internal",  "name": "INTERNAL_SHEET_ID",   "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM", "type": "string"},
             {"id": "p-reg",       "name": "REGISTRY_SHEET_ID",   "value": "1oIoc5l6AJxbREujV72P0aVICMwrDSRFcgzvPv781xhs", "type": "string"},
             {"id": "p-regtab",    "name": "REGISTRY_TAB_NAME",   "value": "Registry", "type": "string"},
