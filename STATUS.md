@@ -1,59 +1,65 @@
-# Status — paused 2026-04-29
+# Status — all 7 suppliers verified for Apr 2026
 
-## Where we are
+## Production state
 
-End-to-end pipeline is **deployed and active** on the Synology n8n container:
+Single canonical workflow (v5) handles all 7 suppliers via Suppliers Registry (one row per supplier). v4 retired.
 
-- v4 (Gavin) — patched + active, cron `0 1 1 * *` SGT
-- v5 parent + child — active, cron `0 2 1 * *` SGT
-- Error handler — active
-- Suppliers Registry seeded with 6 first-wave rows (all `active=TRUE`)
-- Multi-supplier dry run completed; all 6 produced their `Mar 2026 <Supplier> n8n` tab + per-supplier `Run Log <Supplier>` tab in the consolidated internal sheet
+**Cron:** `0 2 1 * *` SGT (1st of every month at 02:00). Next firing: **June 1, 2026**.
+
+| Supplier | Active | Apr 2026 Result | Notable |
+|---|---|---|---|
+| Stan | TRUE | 2 rows | hint=`stinger`; clean SKU matches |
+| Piggy | TRUE | 18 rows | manual fedex deductions captured (purple); Cash IFB cancelled order flagged teal |
+| Bluebird | TRUE | 4 rows | hint=`gel,gels,bluebird,blue bird,bbgb`; 1 TITLE MATCH for verify |
+| Ryan | TRUE | 56 rows | hint=`blu,accublu,dtb`; 24 SKU excludes; bundle SKUs added; 4685+4980 manually flagged coral |
+| Bryan | TRUE | 6 rows | hint=`stk`; sling + stk-worker SKUs; PII filter on properties |
+| Dylan | TRUE | 17 rows | date format `d/LL/yyyy`; 2 REFUND flags |
+| Gavin | TRUE | 85 rows | merged from v4 to v5 (April 2026); excludes incl. d2-victory-shroud-digital |
+
+## Workflows in n8n
+
+```
+n8n list:workflow --active=true
+  ShopifyErrHandle1   Shopify Sync — Error Handler           ACTIVE
+  v5ChildPerSup1      Shopify Per-Supplier Sync v1 (child)   ACTIVE
+  v5ParentMulti1      Shopify Multi-Supplier Sync v1 (parent) ACTIVE  ← cron 0 2 1 * *
+  Pn8M3kQrZb2WyT5j    Shopify Monthly SKU Sync v4            DEACTIVATED (retired)
+```
+
+## Conditional formatting (auto-applied per run)
+
+| Color | Trigger | Meaning |
+|---|---|---|
+| 🟪 Purple | Remarks contains `MANUAL ENTRY` | human-input rows (e.g., fedex deductions) |
+| 🟦 Teal | Remarks contains `CANCELLED` | cancelled Shopify order — verify before paying |
+| 🟥 Red | Remarks contains `REFUND` or `CURRENCY` | error — likely should NOT pay supplier |
+| 🟨 Yellow | Remarks contains `TITLE MATCH` or `UNDERPRICED` | warning — review SKU match or price |
+| 🟧 Orange | OrderNo non-numeric (Walkin / Cash IFB / blank) | non-Shopify entry |
+| 🟫 Grey + bold | Header row | always |
+| 🟧 Coral (manual) | one-off manual flag | direct cell color, not auto |
+
+## Match logic features (v5 child)
+
+- SKU matching with `_↔-` interchangeable + `COLOUR`/`XXX` wildcards
+- Title hints checked across `title`, `variant_title`, `name`, `vendor`, `properties` (PII-filtered), `o.note`, `o.tags`
+- exclude_skus checks the same fallback used for SKU column (li.sku || li.title || li.name)
+- UNDERPRICED check gated on currency=SGD
+- CANCELLED order detection via `o.cancelled_at`
+- REFUND detection via `o.refunds[]` non-empty
+- Manual entries from supplier monthly tabs: type A (fedex deduction-style with empty OrderNo+Date) and type B (Manual XXXX prefix); composite dedup key
+- "To pay" / "Paid" footer rows skipped
+- NO SALE THIS MONTH placeholder when 0 rows match
 
 ## Resume here
 
-User flagged: "i noticed mistake, will correct with you one supplier at a time" — paused before identifying the first supplier issue.
+Next session: production validation when **June 1, 2026 02:00 SGT** cron fires. Verify Run Log entries for all 7 suppliers and inspect each `May 2026 <Supplier> n8n` tab.
 
-When resuming, expect a per-supplier correction request. The fix likely lands in one of these places:
-
-| Issue type | Fix location |
-|---|---|
-| Wrong tab name / wrong sheet ID / wrong format | Suppliers Registry sheet (`1oIoc5l6AJxbREujV72P0aVICMwrDSRFcgzvPv781xhs`) |
-| Missing SKU in Amount Reference | Supplier's own source sheet (the one they edit) |
-| Match logic bug (affects all suppliers) | `n8n-workflow-shopify-per-supplier-child-import.json` Match SKUs Code node — **and apply same change to v4** per knowledge-transfer rule |
-| Output format / column / sort order | Same Match SKUs Code node |
-| Title hints too broad / narrow | Suppliers Registry `title_hints` column |
-| Conditional formatting rule | `Apply Format + Tab Front` Code node in child |
-
-After any code fix:
-1. Edit local JSON
-2. `scp -O` to NAS `/volume1/docker/n8n/`
-3. `docker cp` into container
-4. `n8n import:workflow --input=...`
-5. `n8n update:workflow --id=<id> --active=true`
-6. `docker restart n8n` to pick up activation
-7. Test via `docker stop n8n` → `docker run --rm --entrypoint n8n …` → `docker start n8n`
-8. Read execution data via `python3 /tmp/dump_exec.py <id> "<NodeName>"` on NAS for debugging
-
-## Per-supplier dry-run summary (Mar 2026 data)
-
-| Supplier | Rows in dest | TITLE MATCH | Notes for review |
-|---|---|---|---|
-| Piggy | 22 | 2 | `swampfox-raider-prism-optic` flagged — confirm if Piggy product or false positive |
-| Stan | 8 | 7 | High title-match ratio — Stinger SKUs probably need to be added to `Stinger Amount Reference` |
-| Bluebird | 1 | 1 | Only 1 match in March — confirm correct, or expand `title_hints` beyond `bbsg,bluebird,gel` |
-| Ryan | 246 | 129 | Many Blu-barrel SKUs flagged — likely missing from `Ryan Amount Reference` |
-| Bryan | 0 (deleted) | — | After narrowing hints to `stk,bryan`, will regenerate clean on next cron |
-| Dylan | 14 | 8 | Dylan SKUs not in `AI Dylan Amount Reference` — review TITLE MATCH list |
-
-## Open items unrelated to corrections
-
-- v4 parity test: manually trigger v4 via n8n UI → confirm Mar 2026 + Apr 2026 output unchanged after Amount Ref source flip (or wait for May 1 cron, which will be the natural validation)
+Carryover items:
+- Rotate `changfrancis` DSM password (was leaked in chat earlier)
 - Vitae onboarding deferred until Linford adds an Amount Reference tab
-- Carryover from v4 era: confirm `d2-sbl1-deskmat-3060` SKU dash convention
-- Carryover: rotate `changfrancis` DSM password (was leaked in chat earlier)
+- v4 JSON kept in repo as historical artifact; can be archived to `archive/` later
 
-## File anchors
+## Anchors
 
 - Plan file (not in repo): `~/.claude/plans/n8n-shopify-linear-koala.md`
 - Suppliers Registry: https://docs.google.com/spreadsheets/d/1oIoc5l6AJxbREujV72P0aVICMwrDSRFcgzvPv781xhs/edit
