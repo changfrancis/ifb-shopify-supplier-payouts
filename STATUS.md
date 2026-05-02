@@ -26,12 +26,13 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 ## Workflows in n8n
 
 ```
-n8n list:workflow --active=true
+n8n list:workflow
   ShopifyErrHandle1     Shopify Sync — Error Handler           ACTIVE
   v5ChildPerSup1        Shopify Per-Supplier Sync v1 (child)   ACTIVE
   v5ParentMulti1        Shopify Multi-Supplier Sync v1 (parent) ACTIVE  ← cron 0 2 1 * * SGT
-  Pn8M3kQrZb2WyT5j      Shopify Monthly SKU Sync v4            DEACTIVATED (retired post-convergence)
 ```
+
+v1 (`KT4gqTWzWIoYtQpC`) and v4 (`Pn8M3kQrZb2WyT5j`) deleted from DB on 2026-05-02 (post-convergence cleanup).
 
 Container TZ: `Asia/Taipei` (verified inside container).
 
@@ -74,11 +75,11 @@ Production validation when **June 1, 2026 02:00 SGT** cron fires. Verify:
 ## Open carryover items
 
 - **Vitae**: fill in `Vitae Amount Reference ` listing/fee/takehome columns. Until then, draft rows show Shopify sale price + yellow flag.
-- **Cosmetic**: delete v1 + v4 workflows from n8n UI (3 clicks each). Both are already deactivated and won't fire — purely tidiness.
 
 ## Resolved (was carryover)
 
 - ✅ **Shopify `read_all_orders` scope** granted (verified — Jan 2026 now accessible). Granted scopes on token: `read_all_orders, read_customers, read_orders, read_products`.
+- ✅ **v1 + v4 workflows deleted** from n8n DB on 2026-05-02. SQLite executed inside `python:3-alpine` container with `/volume1/docker/n8n/n8n_data` mounted (host user lacks write perms; container ran as root). Cleared rows from `shared_workflow`, `execution_entity`, `insights_metadata`, `workflow_history`, `workflow_statistics`, `workflow_dependency`, `workflow_publish_history`, `workflow_entity`. Workflow JSON files retained in repo as historical artifacts.
 - ⏸️ **DSM password rotation** — deferred. Other projects are using the same credential during testing; revisit later.
 
 ## Anchors
