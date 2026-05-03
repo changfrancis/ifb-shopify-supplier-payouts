@@ -11,7 +11,7 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 | Stan | TRUE | Mar+Apr 2026 | ✅ | `stinger` | (none) |
 | Piggy | TRUE | Apr 2026 | ✅ | `piggy,piggyfoam,pgf,piggy foam` | `kunlun-1.8-experimental-spring` |
 | Bluebird | TRUE | Mar+Apr 2026 | ✅ | `gel,gels,bluebird,blue bird,bbgb` | (none) |
-| Ryan | TRUE | Apr 2026 | ✅ | `blu,accublu,dtb,holster,molle` | 24 SKUs |
+| Ryan | TRUE | Apr 2026 | ✅ | `blu,accublu,dtb,holster,molle` | 25 SKUs |
 | Bryan | TRUE | Mar+Apr 2026 | ✅ | `stk` | (none) |
 | Dylan | TRUE | Apr 2026 | ✅ | `d2,dylan` | (none) |
 | Gavin | TRUE | Apr 2026 | ✅ | `gfz,gavin,sbl,sbf` | 10 SKUs incl. `d2-victory-shroud-digital` |
