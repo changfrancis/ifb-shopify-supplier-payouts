@@ -39,13 +39,14 @@ v1 (`KT4gqTWzWIoYtQpC`) and v4 (`Pn8M3kQrZb2WyT5j`) deleted from DB on 2026-05-0
 
 Standalone workflow for the custom-printed pre-order t-shirt product (SKU `nerfsg-tshirt-custom-*`). Pulls the last 60 days of Shopify orders, extracts size + nickname, writes the overwriting tab `Tshirt Pre-orders` in the internal sheet for handover to the t-shirt printer.
 
-- **Trigger:** manual only (no cron)
-- **Run:** stop n8n container, `docker run --rm` the CLI image with the same env as production, `n8n execute --id=v6Tshirt1`, restart n8n. (Same procedure as the single-supplier re-run flow above.)
+- **Trigger:** **on-demand only** — no cron, no schedule. Run manually each time the user wants a fresh hand-off list for the t-shirt printer. Window is always trailing 60 days from run time, so each run produces the current snapshot; no historical state to preserve between runs.
+- **Run procedure:** stop n8n container, `docker run --rm` the CLI image with the same env as production, `n8n execute --id=v6Tshirt1`, restart n8n. (Same procedure as the single-supplier re-run flow above.)
 - **Output:** 10 columns — Order No., Order Date, Customer Name, Email, SKU, Size, Quantity, Nickname, Status, Remarks
 - **Quantity expansion:** `qty > 1` → one row per shirt with `Unit n/N` in Remarks
 - **Conditional formatting (per-run, idempotent):**
   - 🟥 Red: Remarks contains `CANCELLED` or `REFUND` (likely don't print)
   - 🟨 Yellow: Remarks contains `NON-ASCII` or `EMPTY NICKNAME` (verify printer / customer)
+- **Last verified run:** 2026-05-03 — 31 orders pulled, 2 with emoji nicknames flagged NON-ASCII, 2 with EMPTY NICKNAME flagged. Tab leftmost in [internal sheet](https://docs.google.com/spreadsheets/d/1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM/edit#gid=1367981525).
 
 Container TZ: `Asia/Taipei` (verified inside container).
 
