@@ -62,7 +62,7 @@ Container TZ: `Asia/Taipei` (verified inside container).
   - Type B — OrderNo prefix `Manual XXXX` (backdated entries)
 - Composite dedup key (orderNo|sku|takehome) for manual rows
 - "To pay" / "Paid" footer rows skipped
-- NO SALE THIS MONTH placeholder when 0 rows match
+- NO SALE THIS MONTH placeholder when 0 rows match (⚠ also fires on idempotent re-runs that produce 0 net-new rows even when tab already has data — see Open items)
 
 ## Resume here
 
@@ -75,6 +75,35 @@ Production validation when **June 1, 2026 02:00 SGT** cron fires. Verify:
 ## Open carryover items
 
 - **Vitae**: fill in `Vitae Amount Reference ` listing/fee/takehome columns. Until then, draft rows show Shopify sale price + yellow flag.
+- **Workflow bug (low pri):** `NO SALE THIS MONTH` placeholder is appended on idempotent re-runs that produce 0 net-new rows, even when the destination tab already has real data. Fix: gate the placeholder on `existingDataRows == 0`, not `matchedThisRun == 0`. Workaround: delete the trailing placeholder row manually after re-runs.
+
+## Manual re-run procedure (single supplier, specific month)
+
+n8n CLI `execute` cannot share port 5679 with the running container, so:
+
+1. **Deactivate non-target rows** in Registry (set `active=FALSE`); keep only the target supplier `TRUE`.
+2. **Stop n8n container** (`docker stop n8n`) — releases port 5679 + DB lock.
+3. **Run a one-shot CLI container** with the same volumes/env as the production container, plus `OVERRIDE_MONTH_*` env vars:
+   ```
+   docker run --rm --user 1000:1000 \
+     -v /volume1/docker/n8n/n8n_data:/home/node/.n8n \
+     -v /volume1/docker/n8n/ifb-n8n-integration-ad058ce853d2.json:/files/sa.json:ro \
+     -e N8N_RUNNERS_ENABLED=false -e N8N_BLOCK_ENV_ACCESS_IN_NODE=false \
+     -e N8N_GOOGLE_SA_JSON=/files/sa.json \
+     -e NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer \
+     -e NODE_FUNCTION_ALLOW_EXTERNAL=luxon \
+     -e SHOPIFY_SHOP=... -e SHOPIFY_CLIENT_ID=... -e SHOPIFY_CLIENT_SECRET=... \
+     -e GENERIC_TIMEZONE=Asia/Taipei -e TZ=Asia/Taipei \
+     -e "OVERRIDE_MONTH_NAME=Apr 2026" -e "OVERRIDE_MONTH_NAME_YY=Apr 26" \
+     -e OVERRIDE_MONTH_START_ISO=2026-04-01T00:00:00.000+08:00 \
+     -e OVERRIDE_MONTH_END_ISO=2026-04-30T23:59:59.999+08:00 \
+     --entrypoint n8n n8nio/n8n:latest execute --id=v5ParentMulti1
+   ```
+4. **Restart n8n** (`docker start n8n`).
+5. **Reactivate all suppliers** in Registry.
+6. Delete trailing `NO SALE THIS MONTH` placeholder if the run was idempotent (see bug above).
+
+Note: workflow only appends. Re-runs do **not** delete previously matched rows that are now excluded — manual deletion required for those.
 
 ## Resolved (was carryover)
 
