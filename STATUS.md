@@ -30,9 +30,22 @@ n8n list:workflow
   ShopifyErrHandle1     Shopify Sync — Error Handler           ACTIVE
   v5ChildPerSup1        Shopify Per-Supplier Sync v1 (child)   ACTIVE
   v5ParentMulti1        Shopify Multi-Supplier Sync v1 (parent) ACTIVE  ← cron 0 2 1 * * SGT
+  v6Tshirt1             Shopify Tshirt Pre-orders v1           INACTIVE  ← manual trigger, on-demand
 ```
 
 v1 (`KT4gqTWzWIoYtQpC`) and v4 (`Pn8M3kQrZb2WyT5j`) deleted from DB on 2026-05-02 (post-convergence cleanup).
+
+## T-shirt pre-order workflow (v6)
+
+Standalone workflow for the custom-printed pre-order t-shirt product (SKU `nerfsg-tshirt-custom-*`). Pulls the last 60 days of Shopify orders, extracts size + nickname, writes the overwriting tab `Tshirt Pre-orders` in the internal sheet for handover to the t-shirt printer.
+
+- **Trigger:** manual only (no cron)
+- **Run:** stop n8n container, `docker run --rm` the CLI image with the same env as production, `n8n execute --id=v6Tshirt1`, restart n8n. (Same procedure as the single-supplier re-run flow above.)
+- **Output:** 10 columns — Order No., Order Date, Customer Name, Email, SKU, Size, Quantity, Nickname, Status, Remarks
+- **Quantity expansion:** `qty > 1` → one row per shirt with `Unit n/N` in Remarks
+- **Conditional formatting (per-run, idempotent):**
+  - 🟥 Red: Remarks contains `CANCELLED` or `REFUND` (likely don't print)
+  - 🟨 Yellow: Remarks contains `NON-ASCII` or `EMPTY NICKNAME` (verify printer / customer)
 
 Container TZ: `Asia/Taipei` (verified inside container).
 

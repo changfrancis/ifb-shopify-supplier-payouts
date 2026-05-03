@@ -1,0 +1,156 @@
+{
+  "id": "v6Tshirt1",
+  "name": "Shopify Tshirt Pre-orders v1",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "v6t-trig-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "p-start",    "name": "WINDOW_START_ISO",    "value": "={{ $now.setZone('Asia/Singapore').minus({ days: 60 }).startOf('day').toISO() }}", "type": "string"},
+            {"id": "p-end",      "name": "WINDOW_END_ISO",      "value": "={{ $now.setZone('Asia/Singapore').endOf('day').toISO() }}", "type": "string"},
+            {"id": "p-internal", "name": "INTERNAL_SHEET_ID",   "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM", "type": "string"},
+            {"id": "p-tab",      "name": "DEST_TAB_NAME",       "value": "Tshirt Pre-orders", "type": "string"},
+            {"id": "p-skupref",  "name": "SKU_PREFIX",          "value": "nerfsg-tshirt-custom-", "type": "string"},
+            {"id": "p-api",      "name": "SHOPIFY_API_VERSION", "value": "2026-04", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "v6t-set-params",
+      "name": "Set Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/oauth/access_token",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "grant_type",    "value": "client_credentials"},
+            {"name": "client_id",     "value": "={{ $env.SHOPIFY_CLIENT_ID }}"},
+            {"name": "client_secret", "value": "={{ $env.SHOPIFY_CLIENT_SECRET }}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "v6t-shopify-token",
+      "name": "Get Shopify Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/api/{{ $('Set Parameters').first().json.SHOPIFY_API_VERSION }}/orders.json?status=any&limit=250&created_at_min={{ encodeURIComponent($('Set Parameters').first().json.WINDOW_START_ISO) }}&created_at_max={{ encodeURIComponent($('Set Parameters').first().json.WINDOW_END_ISO) }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "X-Shopify-Access-Token", "value": "={{ $('Get Shopify Token').first().json.access_token }}"}]},
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers.link && $response.headers.link.includes('rel=\"next\"') ? $response.headers.link.match(/<([^>]+)>;\\s*rel=\"next\"/)[1] : '' }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}",
+              "limitPagesFetched": false
+            }
+          },
+          "retry": {"enabled": true, "maxTries": 3, "waitBetweenTries": 2000}
+        }
+      },
+      "id": "v6t-fetch-orders",
+      "name": "Fetch All Orders (paginated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ Tshirt Pre-Order Match + Build Rows ============\n// Filter Shopify orders to nerfsg-tshirt-custom-* SKUs and emit one row\n// per t-shirt unit (quantity expansion) for the printer handover.\n\nconst params = $('Set Parameters').first().json;\nconst orders = $('Fetch All Orders (paginated)').all().flatMap(p => p.json.orders || []);\n\n// SKU pattern: nerfsg-tshirt-custom-* (with _ <-> - interchangeable, case-insensitive)\nconst skuRe = /^nerfsg[-_]tshirt[-_]custom[-_].*$/i;\n// Title fallback when SKU is missing\nconst titleRe = /nerfsg.*t.?shirt.*custom/i;\n\nconst MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\nfunction fmtDate(d) {\n  if (!d || isNaN(d.getTime())) return '';\n  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear();\n}\n\nfunction getNickname(li) {\n  for (const p of (li.properties || [])) {\n    if (/^nickname$/i.test(String(p.name || ''))) return String(p.value || '');\n  }\n  return '';\n}\n\nfunction deriveStatus(o) {\n  if (o.cancelled_at) return 'cancelled';\n  const fs = String(o.financial_status || '').toLowerCase();\n  if (fs === 'refunded') return 'refunded';\n  if (fs === 'partially_refunded') return 'partially_refunded';\n  if ((o.refunds || []).length > 0) return 'partially_refunded';\n  return fs || 'unknown';\n}\n\nconst out = [];\nfor (const o of orders) {\n  const orderNo = o.order_number != null ? String(o.order_number) : String(o.name || '').replace('#','');\n  const dateFmt = fmtDate(new Date(o.created_at));\n  const createdMs = new Date(o.created_at).getTime();\n  const firstName = (o.customer && o.customer.first_name) || '';\n  const lastName  = (o.customer && o.customer.last_name)  || '';\n  const shipName  = (o.shipping_address && o.shipping_address.name) || '';\n  const customerName = ((firstName + ' ' + lastName).trim()) || shipName || 'Guest';\n  const email  = (o.customer && o.customer.email) || o.email || '';\n  const status = deriveStatus(o);\n\n  for (const li of (o.line_items || [])) {\n    const sku   = String(li.sku || '').trim();\n    const title = String(li.title || '').trim();\n    const matchSku   = sku && skuRe.test(sku);\n    const matchTitle = !sku && titleRe.test(title);\n    if (!matchSku && !matchTitle) continue;\n\n    const size     = String(li.variant_title || '').trim();\n    const nickname = getNickname(li);\n    const qty      = Math.max(1, parseInt(li.quantity || 1, 10));\n\n    for (let i = 0; i < qty; i++) {\n      const flags = [];\n      if (!nickname) flags.push('EMPTY NICKNAME');\n      if (nickname && /[^\\x00-\\x7F]/.test(nickname)) flags.push('NON-ASCII - verify printer');\n      if (status === 'cancelled') flags.push('CANCELLED');\n      if (status === 'refunded' || status === 'partially_refunded') flags.push('REFUND - verify');\n      if (qty > 1) flags.push('Unit ' + (i+1) + '/' + qty);\n\n      out.push({\n        __sortKey: createdMs,\n        'Order No.':     orderNo,\n        'Order Date':    dateFmt,\n        'Customer Name': customerName,\n        'Email':         email,\n        'SKU':           sku || title,\n        'Size':          size,\n        'Quantity':      (i+1) + '/' + qty,\n        'Nickname':      nickname,\n        'Status':        status,\n        'Remarks':       flags.join(' | ')\n      });\n    }\n  }\n}\n\n// Sort newest-first so the most recent orders are at the top of the sheet\nout.sort((a, b) => b.__sortKey - a.__sortKey);\nconst final = out.map(r => {\n  const { __sortKey, ...rest } = r;\n  return rest;\n});\n\nif (final.length === 0) {\n  return [{ json: {\n    'Order No.': '',\n    'Order Date': '',\n    'Customer Name': '',\n    'Email': '',\n    'SKU': '',\n    'Size': '',\n    'Quantity': '',\n    'Nickname': '',\n    'Status': '',\n    'Remarks': 'NO TSHIRT PRE-ORDERS in last 60 days'\n  } }];\n}\nreturn final.map(r => ({ json: r, pairedItem: { item: 0 } }));\n"
+      },
+      "id": "v6t-match",
+      "name": "Match + Build Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ Ensure Tab + Clear (overwrite-each-run pattern) ============\n// Sign JWT, ensure dest tab exists (create if missing), clear A:Z, then\n// pass through Match items unchanged so the next node (Append) writes them.\n\nconst fs = require('fs');\nconst crypto = require('crypto');\nconst https = require('https');\n\nfunction b64u(buf) { return Buffer.from(buf).toString('base64').replace(/=+$/,'').replace(/\\+/g,'-').replace(/\\//g,'_'); }\nfunction signJWT(saJson, scope) {\n  const now = Math.floor(Date.now() / 1000);\n  const header = { alg: 'RS256', typ: 'JWT' };\n  const payload = { iss: saJson.client_email, scope, aud: 'https://oauth2.googleapis.com/token', exp: now+3600, iat: now };\n  const si = b64u(JSON.stringify(header)) + '.' + b64u(JSON.stringify(payload));\n  const signer = crypto.createSign('RSA-SHA256');\n  signer.update(si);\n  return si + '.' + b64u(signer.sign(saJson.private_key));\n}\nfunction httpsReq(opts, body) {\n  return new Promise((resolve, reject) => {\n    const req = https.request(opts, res => { let d=''; res.on('data', c => d+=c); res.on('end', () => resolve({ statusCode: res.statusCode, body: d })); });\n    req.on('error', reject);\n    if (body) req.write(body);\n    req.end();\n  });\n}\nasync function getToken(saJson) {\n  const jwt = signJWT(saJson, 'https://www.googleapis.com/auth/spreadsheets');\n  const body = 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=' + encodeURIComponent(jwt);\n  const r = await httpsReq({ hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body);\n  if (r.statusCode !== 200) throw new Error('token: ' + r.statusCode + ' ' + r.body);\n  return JSON.parse(r.body).access_token;\n}\n\nconst params = $('Set Parameters').first().json;\nconst sa = JSON.parse(fs.readFileSync($env.N8N_GOOGLE_SA_JSON || '/files/sa.json', 'utf8'));\nconst tok = await getToken(sa);\nconst ssId = params.INTERNAL_SHEET_ID;\nconst tab  = params.DEST_TAB_NAME;\n\n// Get sheet metadata; create tab if missing\nconst metaR = await httpsReq({ hostname: 'sheets.googleapis.com', path: '/v4/spreadsheets/' + ssId + '?fields=sheets.properties', method: 'GET', headers: { 'Authorization': 'Bearer ' + tok } });\nif (metaR.statusCode !== 200) throw new Error('meta: ' + metaR.statusCode + ' ' + metaR.body);\nconst meta = JSON.parse(metaR.body);\nlet exists = false;\nfor (const s of (meta.sheets || [])) if (s.properties && s.properties.title === tab) { exists = true; break; }\n\nif (!exists) {\n  const body = JSON.stringify({ requests: [{ addSheet: { properties: { title: tab } } }] });\n  const r = await httpsReq({ hostname: 'sheets.googleapis.com', path: '/v4/spreadsheets/' + ssId + ':batchUpdate', method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, body);\n  if (r.statusCode !== 200) throw new Error('addSheet: ' + r.statusCode + ' ' + r.body);\n}\n\n// Clear contents A:Z (overwrite semantics for each run)\nconst clearPath = '/v4/spreadsheets/' + ssId + '/values/' + encodeURIComponent(tab) + '!A:Z:clear';\nconst clr = await httpsReq({ hostname: 'sheets.googleapis.com', path: clearPath, method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Length': '0' } }, '');\nif (clr.statusCode !== 200) throw new Error('clear: ' + clr.statusCode + ' ' + clr.body);\n\n// Pass through original Match items unchanged so Append writes them\nreturn $input.all();\n"
+      },
+      "id": "v6t-ensure-clear",
+      "name": "Ensure Tab + Clear",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.INTERNAL_SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.DEST_TAB_NAME }}", "mode": "name"},
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v6t-append-rows",
+      "name": "Append Rows to Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1520, 300],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ Apply Format + Move Tab to Front ============\n// Header row (grey + bold), 2 conditional format rules, move tab to leftmost.\n\nconst fs = require('fs');\nconst crypto = require('crypto');\nconst https = require('https');\n\nfunction b64u(buf) { return Buffer.from(buf).toString('base64').replace(/=+$/,'').replace(/\\+/g,'-').replace(/\\//g,'_'); }\nfunction signJWT(saJson, scope) {\n  const now = Math.floor(Date.now() / 1000);\n  const header = { alg: 'RS256', typ: 'JWT' };\n  const payload = { iss: saJson.client_email, scope, aud: 'https://oauth2.googleapis.com/token', exp: now+3600, iat: now };\n  const si = b64u(JSON.stringify(header)) + '.' + b64u(JSON.stringify(payload));\n  const signer = crypto.createSign('RSA-SHA256');\n  signer.update(si);\n  return si + '.' + b64u(signer.sign(saJson.private_key));\n}\nfunction httpsReq(opts, body) {\n  return new Promise((resolve, reject) => {\n    const req = https.request(opts, res => { let d=''; res.on('data', c => d+=c); res.on('end', () => resolve({ statusCode: res.statusCode, body: d })); });\n    req.on('error', reject);\n    if (body) req.write(body);\n    req.end();\n  });\n}\nasync function getToken(saJson) {\n  const jwt = signJWT(saJson, 'https://www.googleapis.com/auth/spreadsheets');\n  const body = 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=' + encodeURIComponent(jwt);\n  const r = await httpsReq({ hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body);\n  if (r.statusCode !== 200) throw new Error('token: ' + r.statusCode + ' ' + r.body);\n  return JSON.parse(r.body).access_token;\n}\n\nconst params = $('Set Parameters').first().json;\nconst sa = JSON.parse(fs.readFileSync($env.N8N_GOOGLE_SA_JSON || '/files/sa.json', 'utf8'));\nconst tok = await getToken(sa);\nconst ssId = params.INTERNAL_SHEET_ID;\nconst tab  = params.DEST_TAB_NAME;\n\n// Get sheetId AND existing CF rules in one call (no ranges filter — that filter\n// only returns rules overlapping the cell, which would miss rules anchored to\n// row 2+ and cause CF rules to accumulate on each run).\nconst metaR = await httpsReq({ hostname: 'sheets.googleapis.com', path: '/v4/spreadsheets/' + ssId + '?fields=sheets.properties,sheets.conditionalFormats', method: 'GET', headers: { 'Authorization': 'Bearer ' + tok } });\nconst meta = JSON.parse(metaR.body);\nlet sheetId = null;\nlet existing = [];\nfor (const s of (meta.sheets || [])) {\n  if (s.properties && s.properties.title === tab) {\n    sheetId = s.properties.sheetId;\n    existing = s.conditionalFormats || [];\n    break;\n  }\n}\nif (sheetId === null) throw new Error('Tab not found: ' + tab);\n\nconst RED    = { red: 1.0, green: 0.78, blue: 0.78 };\nconst YELLOW = { red: 1.0, green: 0.94, blue: 0.62 };\nconst GREY   = { red: 0.85, green: 0.85, blue: 0.85 };\nconst range  = { sheetId, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: 10 };\nconst reqs = [];\n\n// Move tab to leftmost\nreqs.push({ updateSheetProperties: { properties: { sheetId, index: 0 }, fields: 'index' } });\n// Header row formatting (row 1, cols A-J)\nreqs.push({ repeatCell: {\n  range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 10 },\n  cell: { userEnteredFormat: { backgroundColor: GREY, textFormat: { bold: true } } },\n  fields: 'userEnteredFormat(backgroundColor,textFormat)'\n}});\n// Delete existing CF rules (reverse order so indices stay valid)\nfor (let i = existing.length - 1; i >= 0; i--) {\n  reqs.push({ deleteConditionalFormatRule: { sheetId, index: i } });\n}\n// Rule 0: RED — CANCELLED or REFUND in Remarks (col J = $J2)\nreqs.push({ addConditionalFormatRule: { rule: {\n  ranges: [range],\n  booleanRule: {\n    condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: '=OR(REGEXMATCH($J2,\"CANCELLED\"),REGEXMATCH($J2,\"REFUND\"))' }] },\n    format: { backgroundColor: RED }\n  }\n}, index: 0 }});\n// Rule 1: YELLOW — NON-ASCII or EMPTY NICKNAME in Remarks\nreqs.push({ addConditionalFormatRule: { rule: {\n  ranges: [range],\n  booleanRule: {\n    condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: '=OR(REGEXMATCH($J2,\"NON-ASCII\"),REGEXMATCH($J2,\"EMPTY NICKNAME\"))' }] },\n    format: { backgroundColor: YELLOW }\n  }\n}, index: 1 }});\n\nconst body = JSON.stringify({ requests: reqs });\nconst r = await httpsReq({ hostname: 'sheets.googleapis.com', path: '/v4/spreadsheets/' + ssId + ':batchUpdate', method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, body);\nif (r.statusCode !== 200) throw new Error('format batchUpdate: ' + r.statusCode + ' ' + r.body);\nreturn [{ json: { status: 'success', tab, sheet_id: sheetId, requests_applied: reqs.length } }];\n"
+      },
+      "id": "v6t-format",
+      "name": "Apply Format + Tab Front",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 300],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Manual Trigger":              { "main": [[ { "node": "Set Parameters",            "type": "main", "index": 0 } ]] },
+    "Set Parameters":              { "main": [[ { "node": "Get Shopify Token",         "type": "main", "index": 0 } ]] },
+    "Get Shopify Token":           { "main": [[ { "node": "Fetch All Orders (paginated)", "type": "main", "index": 0 } ]] },
+    "Fetch All Orders (paginated)":{ "main": [[ { "node": "Match + Build Rows",        "type": "main", "index": 0 } ]] },
+    "Match + Build Rows":          { "main": [[ { "node": "Ensure Tab + Clear",        "type": "main", "index": 0 } ]] },
+    "Ensure Tab + Clear":          { "main": [[ { "node": "Append Rows to Tab",        "type": "main", "index": 0 } ]] },
+    "Append Rows to Tab":          { "main": [[ { "node": "Apply Format + Tab Front",  "type": "main", "index": 0 } ]] }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1", "errorWorkflow": "ShopifyErrHandle1"},
+  "tags": []
+}

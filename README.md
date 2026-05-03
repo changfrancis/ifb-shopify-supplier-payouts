@@ -28,10 +28,11 @@ Runs on a Synology NAS in Docker (`n8nio/n8n:latest`).
 
 | File | Purpose |
 |---|---|
-| `n8n-workflow-shopify-monthly-sku-v4-import.json` | **v4** — Gavin's monthly payout sheet. Reads `Gavin Amount Reference` from source sheet, dedup-against-Shopify Walkin merge. Cron: `0 1 1 * *` SGT. |
+| `n8n-workflow-shopify-monthly-sku-v4-import.json` | **v4** — Gavin's monthly payout sheet (retired post-convergence; kept as historical artifact). |
 | `n8n-workflow-shopify-multi-supplier-parent-import.json` | **v5 parent** — Loads Suppliers Registry, fetches Shopify once, dispatches per-supplier child. Cron: `0 2 1 * *` SGT. |
 | `n8n-workflow-shopify-per-supplier-child-import.json` | **v5 child** — Per-supplier pipeline: read Amount Ref + Walkin, match, append, format. Triggered via `Execute Workflow` from parent. |
-| `n8n-workflow-error-handler.json` | Workflow-level failure catcher (wired as Error Workflow on both v4 and v5). |
+| `n8n-workflow-shopify-tshirt-preorder-import.json` | **v6** — On-demand t-shirt pre-order extraction. Pulls last 60 days of orders matching `nerfsg-tshirt-custom-*`, writes the overwriting `Tshirt Pre-orders` tab for handover to the t-shirt printer. Manual trigger only. |
+| `n8n-workflow-error-handler.json` | Workflow-level failure catcher (wired as Error Workflow on v5 + v6). |
 
 ## Suppliers Registry
 
