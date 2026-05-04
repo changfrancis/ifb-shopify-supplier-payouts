@@ -15,13 +15,13 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 | Bryan | TRUE | Mar+Apr 2026 | ✅ | `stk` | (none) |
 | Dylan | TRUE | Apr 2026 | ✅ | `d2,dylan` | (none) |
 | Gavin | TRUE | Apr 2026 | ✅ | `gfz,gavin,sbl,sbf` | 10 SKUs incl. `d2-victory-shroud-digital` |
-| **Vitae** | TRUE | Mar+Apr 2026 | ⚠️ **INCOMPLETE** | `linny,linford,vitae,vitae precision,effort` | 5 SKUs (false-positive items) |
+| Vitae | TRUE | Mar+Apr 2026 | ✅ | `linny,linford,vitae,vitae precision,effort` | 5 SKUs (false-positive items) |
 
-### Vitae incomplete — what's pending
+### Vitae onboarding completed (2026-05-04)
 
-- **Amount Reference price columns are blank.** SKUs are listed (51 entries: `vitae-*-knob`, `vitae-aeb-grip-*`, `mlok-*`, etc.) but Listing Price / 3DPS+Stripe Fee / Linford Amount columns are empty.
-- **Workaround in workflow**: when ref listing is blank, Match Code falls back to Shopify sale price for the Listing column (and Takehome = Listing as a draft). Every such row is yellow-flagged `TITLE MATCH - ref price pending`.
-- **Action for Linford onboarding**: fill in Listing / Fee / Takehome in `Vitae Amount Reference ` (the trailing-space tab in `1KWz6wl5m4gDkBUOehvlmOWBv4IYj9X5fwS1Te8yRxD8`). Once filled, future runs will produce clean SKU matches with proper takehome splits.
+- Linford filled in all 51 SKUs' Listing / Fee / Takehome columns in `Vitae Amount Reference ` (trailing-space tab in `1KWz6wl5m4gDkBUOehvlmOWBv4IYj9X5fwS1Te8yRxD8`).
+- Mar 2026 Vitae n8n re-run (delete + rebuild): **14 clean SKU matches** with proper takehome splits + 1 title match (custom barrel job). Was 13 yellow-flagged `ref price pending` rows before.
+- Apr 2026 Vitae n8n re-run: 1 row (custom barrel machining for Order 4712). All 331 April orders scanned — only one Vitae-related line item exists for April, and it's a custom title-match. Reference SKUs didn't sell in April.
 
 ## Workflows in n8n
 
@@ -88,8 +88,8 @@ Production validation when **June 1, 2026 02:00 SGT** cron fires. Verify:
 
 ## Open carryover items
 
-- **Vitae**: fill in `Vitae Amount Reference ` listing/fee/takehome columns. Until then, draft rows show Shopify sale price + yellow flag.
 - **Workflow bug (low pri):** `NO SALE THIS MONTH` placeholder is appended on idempotent re-runs that produce 0 net-new rows, even when the destination tab already has real data. Fix: gate the placeholder on `existingDataRows == 0`, not `matchedThisRun == 0`. Workaround: delete the trailing placeholder row manually after re-runs.
+- **Workflow limitation:** v5 child only **appends** to dest tabs — it never deletes or updates existing rows. To pick up new excludes / updated reference prices for a past month, **delete the dest tab first**, then re-run with the month override (the workflow recreates the tab from scratch). Demonstrated 2026-05-04: Apr 2026 Ryan rebuilt cleanly after `HC-diana-magnetic-holster` was added to Ryan's exclude list; Mar+Apr 2026 Vitae rebuilt cleanly after Linford filled in reference prices.
 
 ## Manual re-run procedure (single supplier, specific month)
 
@@ -116,6 +116,8 @@ n8n CLI `execute` cannot share port 5679 with the running container, so:
 4. **Restart n8n** (`docker start n8n`).
 5. **Reactivate all suppliers** in Registry.
 6. Delete trailing `NO SALE THIS MONTH` placeholder if the run was idempotent (see bug above).
+
+**For a clean rebuild** (e.g. after adding excludes or filling in reference prices for a past month): **delete the dest tab first** (`deleteSheet` via Sheets API or manually), then run the procedure above. The workflow will recreate the tab from scratch with the latest config.
 
 Note: workflow only appends. Re-runs do **not** delete previously matched rows that are now excluded — manual deletion required for those.
 
