@@ -1,21 +1,34 @@
-# Status — production-ready, cron set for June 1
+# Status — production live, June 1 2026 cron fired successfully
 
 ## Production state
 
 Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v4 retired.
 
-**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Next firing: June 1, 2026 02:00 SGT.**
+**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-06-01 02:00 SGT** (all 8 May tabs created, no rate-limit errors). **Next firing: July 1, 2026 02:00 SGT.**
 
 | Supplier | Active | Latest verified | Status | Title hints | Excludes |
 |---|---|---|---|---|---|
-| Stan | TRUE | Mar+Apr 2026 | ✅ | `stinger` | (none) |
-| Piggy | TRUE | Apr 2026 | ✅ | `piggy,piggyfoam,pgf,piggy foam` | `kunlun-1.8-experimental-spring` |
-| Bluebird | TRUE | Mar+Apr 2026 | ✅ | `gel,gels,bluebird,blue bird,bbgb` | (none) |
-| Ryan | TRUE | Apr 2026 | ✅ | `blu,accublu,dtb,holster,molle` | 25 SKUs |
-| Bryan | TRUE | Mar+Apr 2026 | ✅ | `stk` | (none) |
-| Dylan | TRUE | Apr 2026 | ✅ | `d2,dylan` | (none) |
-| Gavin | TRUE | Apr 2026 | ✅ | `gfz,gavin,sbl,sbf` | 10 SKUs incl. `d2-victory-shroud-digital` |
-| Vitae | TRUE | Mar+Apr 2026 | ✅ | `linny,linford,vitae,vitae precision,effort` | 5 SKUs (false-positive items) |
+| Stan | TRUE | Mar–May 2026 | ✅ | `stinger` | (none) |
+| Piggy | TRUE | May 2026 (rebuilt) | ✅ | `piggy,piggyfoam,pgf,piggy foam` | `kunlun-1.8-experimental-spring` |
+| Bluebird | TRUE | Mar–May 2026 | ✅ | `gel,gels,bluebird,blue bird,bbgb` | (none) |
+| Ryan | TRUE | Apr 2026 (rebuilt) + May 2026 | ✅ | `blu,accublu,dtb,holster,molle` | 25 SKUs |
+| Bryan | TRUE | Mar–May 2026 | ✅ | `stk` | (none) |
+| Dylan | TRUE | May 2026 (rebuilt) | ✅ | `d2,dylan` | (none) |
+| Gavin | TRUE | Apr–May 2026 | ✅ | `gfz,gavin,sbl,sbf` | 10 SKUs incl. `d2-victory-shroud-digital` |
+| Vitae | TRUE | Mar–May 2026 | ✅ | `linny,linford,vitae,vitae precision,effort` | 5 SKUs (false-positive items) |
+
+### May 2026 cron output (2026-06-01 02:00 SGT)
+
+| Supplier | Rows | Notes |
+|---|---|---|
+| Stan | 1 | |
+| Piggy | 5 | Rebuilt 2026-06-01 after `pgf-fenrir-717-3d-prints` SKU update; row count unchanged (no fenrir sales in May) |
+| Bluebird | 4 | |
+| Ryan | 89 | |
+| Bryan | 1 | |
+| Dylan | 27 | Rebuilt 2026-06-01 after 14 SKU renames (D2-Worker handguards, low-rise rails, mousepads, deskmats); 9 title-match → **2 title-match** (7 rows now SKU-match cleanly with proper takehome) |
+| Gavin | 63 | |
+| Vitae | 9 | |
 
 ### Vitae onboarding completed (2026-05-04)
 
@@ -46,7 +59,7 @@ Standalone workflow for the custom-printed pre-order t-shirt product (SKU `nerfs
 - **Conditional formatting (per-run, idempotent):**
   - 🟥 Red: Remarks contains `CANCELLED` or `REFUND` (likely don't print)
   - 🟨 Yellow: Remarks contains `NON-ASCII` or `EMPTY NICKNAME` (verify printer / customer)
-- **Last verified run:** 2026-05-03 — 31 orders pulled, 2 with emoji nicknames flagged NON-ASCII, 2 with EMPTY NICKNAME flagged. Tab leftmost in [internal sheet](https://docs.google.com/spreadsheets/d/1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM/edit#gid=1367981525).
+- **Last verified run:** 2026-06-01 (post n8n 2.22.5 upgrade) — 32 orders pulled including a May 7 pre-order (5076), Order 4997 `Deez🥜` + Order 4996 `DuncanRyuu🇸🇬` flagged NON-ASCII, qty expansion verified, 2 CF rules stable. Tab leftmost in [internal sheet](https://docs.google.com/spreadsheets/d/1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM/edit#gid=1367981525).
 
 Container TZ: `Asia/Taipei` (verified inside container).
 
@@ -80,11 +93,12 @@ Container TZ: `Asia/Taipei` (verified inside container).
 
 ## Resume here
 
-Production validation when **June 1, 2026 02:00 SGT** cron fires. Verify:
+Production validation when **July 1, 2026 02:00 SGT** cron fires. Verify:
 - 8 child sub-workflow executions (one per active supplier)
-- 8 monthly tabs `May 2026 <Supplier> n8n` created in internal sheet
+- 8 monthly tabs `Jun 2026 <Supplier> n8n` created in internal sheet
 - 8 Run Log entries appended
 - No 429 rate-limit errors
+- Code nodes still load `fs`/`crypto`/`https`/`luxon` correctly under n8n 2.22.5 JS Task Runner (first scheduled-cron run on the new version — manual smoke test on v6Tshirt1 already passed)
 
 ## Open carryover items
 
@@ -102,10 +116,12 @@ n8n CLI `execute` cannot share port 5679 with the running container, so:
    docker run --rm --user 1000:1000 \
      -v /volume1/docker/n8n/n8n_data:/home/node/.n8n \
      -v /volume1/docker/n8n/ifb-n8n-integration-ad058ce853d2.json:/files/sa.json:ro \
-     -e N8N_RUNNERS_ENABLED=false -e N8N_BLOCK_ENV_ACCESS_IN_NODE=false \
+     -e N8N_BLOCK_ENV_ACCESS_IN_NODE=false \
      -e N8N_GOOGLE_SA_JSON=/files/sa.json \
      -e NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer \
      -e NODE_FUNCTION_ALLOW_EXTERNAL=luxon \
+     -e N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer \
+     -e N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_EXTERNAL=luxon \
      -e SHOPIFY_SHOP=... -e SHOPIFY_CLIENT_ID=... -e SHOPIFY_CLIENT_SECRET=... \
      -e GENERIC_TIMEZONE=Asia/Taipei -e TZ=Asia/Taipei \
      -e "OVERRIDE_MONTH_NAME=Apr 2026" -e "OVERRIDE_MONTH_NAME_YY=Apr 26" \
@@ -123,12 +139,16 @@ Note: workflow only appends. Re-runs do **not** delete previously matched rows t
 
 ## Resolved (was carryover)
 
+- ✅ **n8n upgraded 2.17.8 → 2.22.5** on 2026-06-01 (post-cron). 6 DB migrations applied cleanly. Removed deprecated `N8N_RUNNERS_ENABLED=false` from compose. Code nodes still work — JS Task Runner uses `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer` (already set). DB backup at `/home/node/.n8n/database.sqlite.pre-upgrade-2026-06-01.bak` (1.07 GB); compose backup at `/volume1/docker/n8n/docker-compose.yml.pre-2.22.5.bak`. Smoke test: v6Tshirt1 re-run successful (32 rows, 2 CF rules, emoji preserved).
+- ✅ **Dylan SKU refresh (2026-06-01)** — added 14 new lowercase-hyphenated SKUs to Amount Reference (Worker handguards, low-rise rails, mousepads, deskmats) alongside the old uppercase-space variants for historical reference. May 2026 rebuilt cleanly (9 → 2 title-match).
+- ✅ **Piggy fenrir SKU update (2026-06-01)** — added `pgf-fenrir-717-3d-prints` to Amount Reference. May 2026 rebuilt (preventative; no fenrir sales in May).
 - ✅ **Shopify `read_all_orders` scope** granted (verified — Jan 2026 now accessible). Granted scopes on token: `read_all_orders, read_customers, read_orders, read_products`.
 - ✅ **v1 + v4 workflows deleted** from n8n DB on 2026-05-02. SQLite executed inside `python:3-alpine` container with `/volume1/docker/n8n/n8n_data` mounted (host user lacks write perms; container ran as root). Cleared rows from `shared_workflow`, `execution_entity`, `insights_metadata`, `workflow_history`, `workflow_statistics`, `workflow_dependency`, `workflow_publish_history`, `workflow_entity`. Workflow JSON files retained in repo as historical artifacts.
 - ⏸️ **DSM password rotation** — deferred. Other projects are using the same credential during testing; revisit later.
 
 ## Anchors
 
+- **Sheets Index** (quick links to all sheets, leftmost tab in internal sheet): https://docs.google.com/spreadsheets/d/1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM/edit#gid=1615623275
 - Suppliers Registry: https://docs.google.com/spreadsheets/d/1oIoc5l6AJxbREujV72P0aVICMwrDSRFcgzvPv781xhs/edit
 - Internal sheet (n8n output): https://docs.google.com/spreadsheets/d/1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM/edit
 - Service account: `n8n-sheets@ifb-n8n-integration.iam.gserviceaccount.com`
