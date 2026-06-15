@@ -12,7 +12,7 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 | Piggy | TRUE | May 2026 (rebuilt) | ✅ | `piggy,piggyfoam,pgf,piggy foam` | `kunlun-1.8-experimental-spring` |
 | Bluebird | TRUE | Mar–May 2026 | ✅ | `gel,gels,bluebird,blue bird,bbgb` | (none) |
 | Ryan | TRUE | Apr 2026 (rebuilt) + May 2026 | ✅ | `blu,accublu,dtb,holster,molle` | 25 SKUs |
-| Bryan | TRUE | Mar–May 2026 | ✅ | `stk` | (none) |
+| Bryan | TRUE | May 2026 (rebuilt) | ✅ | `stk` | (none) |
 | Dylan | TRUE | May 2026 (rebuilt) | ✅ | `d2,dylan` | (none) |
 | Gavin | TRUE | Apr–May 2026 | ✅ | `gfz,gavin,sbl,sbf` | 10 SKUs incl. `d2-victory-shroud-digital` |
 | Vitae | TRUE | Mar–May 2026 | ✅ | `linny,linford,vitae,vitae precision,effort` | 5 SKUs (false-positive items) |
@@ -25,7 +25,7 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 | Piggy | 5 | Rebuilt 2026-06-01 after `pgf-fenrir-717-3d-prints` SKU update; row count unchanged (no fenrir sales in May) |
 | Bluebird | 4 | |
 | Ryan | 89 | |
-| Bryan | 1 | |
+| Bryan | 7 | Rebuilt 2026-06-01 after Bryan refreshed sling SKUs in Amount Reference; **1 row → 7 rows** (was missing 6 sling sales that had no SKU match). Includes 1 row flagged `REFUND - verify` (Order 5107) |
 | Dylan | 27 | Rebuilt 2026-06-01 after 14 SKU renames (D2-Worker handguards, low-rise rails, mousepads, deskmats); 9 title-match → **2 title-match** (7 rows now SKU-match cleanly with proper takehome) |
 | Gavin | 63 | |
 | Vitae | 9 | |
@@ -142,6 +142,7 @@ Note: workflow only appends. Re-runs do **not** delete previously matched rows t
 - ✅ **n8n upgraded 2.17.8 → 2.22.5** on 2026-06-01 (post-cron). 6 DB migrations applied cleanly. Removed deprecated `N8N_RUNNERS_ENABLED=false` from compose. Code nodes still work — JS Task Runner uses `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer` (already set). DB backup at `/home/node/.n8n/database.sqlite.pre-upgrade-2026-06-01.bak` (1.07 GB); compose backup at `/volume1/docker/n8n/docker-compose.yml.pre-2.22.5.bak`. Smoke test: v6Tshirt1 re-run successful (32 rows, 2 CF rules, emoji preserved).
 - ✅ **Dylan SKU refresh (2026-06-01)** — added 14 new lowercase-hyphenated SKUs to Amount Reference (Worker handguards, low-rise rails, mousepads, deskmats) alongside the old uppercase-space variants for historical reference. May 2026 rebuilt cleanly (9 → 2 title-match).
 - ✅ **Piggy fenrir SKU update (2026-06-01)** — added `pgf-fenrir-717-3d-prints` to Amount Reference. May 2026 rebuilt (preventative; no fenrir sales in May).
+- ✅ **Bryan sling SKU refresh (2026-06-01)** — added 4 new sling SKUs to Amount Reference (`stk-qd-swivel-mount`, `sling-qd-pic-mount`, `sling-2pt-black-1000d`, `sling-2pt-multicam-500d`); old `stk-sling-*` refs kept as historical. May 2026 rebuilt → **1 row → 7 rows** (was silently missing 6 sales). Bryan supplier has only the title hint `stk` so SKUs without that prefix were dropping through. **Lesson**: when Shopify renames SKUs in bulk for a supplier, dead refs are silent — only the SKU audit catches them.
 - ✅ **Shopify `read_all_orders` scope** granted (verified — Jan 2026 now accessible). Granted scopes on token: `read_all_orders, read_customers, read_orders, read_products`.
 - ✅ **v1 + v4 workflows deleted** from n8n DB on 2026-05-02. SQLite executed inside `python:3-alpine` container with `/volume1/docker/n8n/n8n_data` mounted (host user lacks write perms; container ran as root). Cleared rows from `shared_workflow`, `execution_entity`, `insights_metadata`, `workflow_history`, `workflow_statistics`, `workflow_dependency`, `workflow_publish_history`, `workflow_entity`. Workflow JSON files retained in repo as historical artifacts.
 - ⏸️ **DSM password rotation** — deferred. Other projects are using the same credential during testing; revisit later.
