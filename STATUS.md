@@ -36,6 +36,24 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 - Mar 2026 Vitae n8n re-run (delete + rebuild): **14 clean SKU matches** with proper takehome splits + 1 title match (custom barrel job). Was 13 yellow-flagged `ref price pending` rows before.
 - Apr 2026 Vitae n8n re-run: 1 row (custom barrel machining for Order 4712). All 331 April orders scanned — only one Vitae-related line item exists for April, and it's a custom title-match. Reference SKUs didn't sell in April.
 
+### Jun 2026 (manual run + targeted rebuilds, 2026-06-29..30)
+
+Manual Jun 2026 run done 2026-06-29 ahead of the July 1 cron, then two targeted rebuilds today:
+
+- **Gavin source tab rename**: source had `June 2026` (full month) but workflow expects `Jun 2026` (`LLL yyyy` template — what every other Gavin month uses). Renamed via Sheets API, rebuilt: **80 → 107 rows (+22 Walkin manual entries** for Gavin Purchase shipping deductions that had been silently dropped).
+- **Bluebird rebuild for Order 5526**: order placed 2026-06-30 05:07 SGT (after the manual run). Bluebird Jun 2026 was 1 → **3 rows** (Order 5526 captured: `bbgb-mk3-thor`, `bbgb-shark-shus`).
+
+| Supplier | Jun 2026 rows | Notes |
+|---|---|---|
+| Stan | 2 | |
+| Piggy | 8 | |
+| Bluebird | 3 | Rebuilt 2026-06-30 to capture Order 5526 (created after manual run) |
+| Ryan | 200 | 113 title-match — possible Shopify SKU rename pattern, worth auditing after July 1 cron |
+| Bryan | 6 | Clean — new sling SKUs working |
+| Dylan | 11 | Clean — SKU refresh working |
+| Gavin | 107 | Rebuilt 2026-06-30 after tab rename — 22 Walkin manual entries now flowing |
+| Vitae | 1 | |
+
 ## Workflows in n8n
 
 ```
@@ -140,6 +158,8 @@ Note: workflow only appends. Re-runs do **not** delete previously matched rows t
 ## Resolved (was carryover)
 
 - ✅ **n8n upgraded 2.17.8 → 2.22.5** on 2026-06-01 (post-cron). 6 DB migrations applied cleanly. Removed deprecated `N8N_RUNNERS_ENABLED=false` from compose. Code nodes still work — JS Task Runner uses `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer` (already set). DB backup at `/home/node/.n8n/database.sqlite.pre-upgrade-2026-06-01.bak` (1.07 GB); compose backup at `/volume1/docker/n8n/docker-compose.yml.pre-2.22.5.bak`. Smoke test: v6Tshirt1 re-run successful (32 rows, 2 CF rules, emoji preserved).
+- ✅ **Gavin Jun 2026 tab rename + rebuild (2026-06-30)** — source had `June 2026` instead of `Jun 2026` (anomaly vs all other Gavin months); workflow read 0 rows from walkin source. Renamed via Sheets API, deleted dest, rebuilt: 80 → 107 rows (+22 Walkin manual entries recovered).
+- ✅ **Bluebird Jun 2026 rebuild for Order 5526 (2026-06-30)** — order placed after the manual run; rebuild captured `bbgb-mk3-thor` + `bbgb-shark-shus`. 1 → 3 rows.
 - ✅ **Dylan SKU refresh (2026-06-01)** — added 14 new lowercase-hyphenated SKUs to Amount Reference (Worker handguards, low-rise rails, mousepads, deskmats) alongside the old uppercase-space variants for historical reference. May 2026 rebuilt cleanly (9 → 2 title-match).
 - ✅ **Piggy fenrir SKU update (2026-06-01)** — added `pgf-fenrir-717-3d-prints` to Amount Reference. May 2026 rebuilt (preventative; no fenrir sales in May).
 - ✅ **Bryan sling SKU refresh (2026-06-01)** — added 4 new sling SKUs to Amount Reference (`stk-qd-swivel-mount`, `sling-qd-pic-mount`, `sling-2pt-black-1000d`, `sling-2pt-multicam-500d`); old `stk-sling-*` refs kept as historical. May 2026 rebuilt → **1 row → 7 rows** (was silently missing 6 sales). Bryan supplier has only the title hint `stk` so SKUs without that prefix were dropping through. **Lesson**: when Shopify renames SKUs in bulk for a supplier, dead refs are silent — only the SKU audit catches them.
