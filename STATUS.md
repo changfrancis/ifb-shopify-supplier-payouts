@@ -1,10 +1,10 @@
-# Status — production live, June 1 2026 cron fired successfully
+# Status — production live, July 1 2026 cron fired successfully (2nd scheduled run on 2.27.5)
 
 ## Production state
 
 Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v4 retired.
 
-**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-06-01 02:00 SGT** (all 8 May tabs created, no rate-limit errors). **Next firing: July 1, 2026 02:00 SGT.**
+**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-07-01 02:00 SGT** (first scheduled cron on n8n 2.27.5 — all 8 suppliers appended cleanly, +30 total rows for June 29–30 orders, ~4 min end-to-end). **Next firing: August 1, 2026 02:00 SGT.**
 
 | Supplier | Active | Latest verified | Status | Title hints | Excludes |
 |---|---|---|---|---|---|
@@ -12,7 +12,7 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 | Piggy | TRUE | May 2026 (rebuilt) | ✅ | `piggy,piggyfoam,pgf,piggy foam` | `kunlun-1.8-experimental-spring` |
 | Bluebird | TRUE | Mar–May 2026 | ✅ | `gel,gels,bluebird,blue bird,bbgb` | (none) |
 | Ryan | TRUE | Apr 2026 (rebuilt) + May 2026 | ✅ | `blu,accublu,dtb,holster,molle` | 25 SKUs |
-| Bryan | TRUE | May 2026 (rebuilt) | ✅ | `stk` | (none) |
+| Bryan | TRUE | Jun 2026 (rebuilt) | ✅ | `stk` | (none) |
 | Dylan | TRUE | May 2026 (rebuilt) | ✅ | `d2,dylan` | (none) |
 | Gavin | TRUE | Apr–May 2026 | ✅ | `gfz,gavin,sbl,sbf` | 10 SKUs incl. `d2-victory-shroud-digital` |
 | Vitae | TRUE | Mar–May 2026 | ✅ | `linny,linford,vitae,vitae precision,effort` | 5 SKUs (false-positive items) |
@@ -161,6 +161,8 @@ Note: workflow only appends. Re-runs do **not** delete previously matched rows t
 - ✅ **n8n upgraded 2.22.5 → 2.27.5** on 2026-06-30 (~15 hours before July 1 cron). No DB migrations needed (2.22.5 already current schema). All 3 active workflows re-activated cleanly. Smoke test v6Tshirt1 passed (10 rows, 2 CF rules, JS Task Runner working with fs/crypto/https/luxon). DB backup at `/volume1/docker/n8n/n8n_data/database.sqlite.pre-2.27.5-2026-06-30.bak`.
 - ✅ **Gavin Jun 2026 tab rename + rebuild (2026-06-30)** — source had `June 2026` instead of `Jun 2026` (anomaly vs all other Gavin months); workflow read 0 rows from walkin source. Renamed via Sheets API, deleted dest, rebuilt: 80 → 107 rows (+22 Walkin manual entries recovered).
 - ✅ **Bluebird Jun 2026 rebuild for Order 5526 (2026-06-30)** — order placed after the manual run; rebuild captured `bbgb-mk3-thor` + `bbgb-shark-shus`. 1 → 3 rows.
+- ✅ **Bryan dual-mag-pouch SKU add + Jun 2026 rebuild (2026-07-01)** — orders 5457 (qty 4) + 5462 (qty 1) had SKU `stk-worker-dual-mag-pouch` not in ref. First attempt added `stk-worker-mag-pouch-2x` (Bryan interpreted "dual" as "2x"), which didn't match Shopify's literal `dual`. Added `stk-worker-dual-mag-pouch` ($19/$5/$14 same as 2x) alongside; rebuilt Jun 2026 Bryan: 7 → 11 rows.
+- ✅ **July 1 cron success (2026-07-01 02:00 SGT)** — first scheduled cron on n8n 2.27.5, mode=`trigger` (not manual). All 8 suppliers appended cleanly, +30 orders for June 29–30 sales. Total: Stan 3, Piggy 9, Bluebird 4, Ryan 209, Bryan 11, Dylan 13, Gavin 121, Vitae 2.
 - ✅ **Dylan SKU refresh (2026-06-01)** — added 14 new lowercase-hyphenated SKUs to Amount Reference (Worker handguards, low-rise rails, mousepads, deskmats) alongside the old uppercase-space variants for historical reference. May 2026 rebuilt cleanly (9 → 2 title-match).
 - ✅ **Piggy fenrir SKU update (2026-06-01)** — added `pgf-fenrir-717-3d-prints` to Amount Reference. May 2026 rebuilt (preventative; no fenrir sales in May).
 - ✅ **Bryan sling SKU refresh (2026-06-01)** — added 4 new sling SKUs to Amount Reference (`stk-qd-swivel-mount`, `sling-qd-pic-mount`, `sling-2pt-black-1000d`, `sling-2pt-multicam-500d`); old `stk-sling-*` refs kept as historical. May 2026 rebuilt → **1 row → 7 rows** (was silently missing 6 sales). Bryan supplier has only the title hint `stk` so SKUs without that prefix were dropping through. **Lesson**: when Shopify renames SKUs in bulk for a supplier, dead refs are silent — only the SKU audit catches them.
