@@ -77,21 +77,30 @@ Container: `n8nio/n8n:latest` on Synology DSM Docker (currently **n8n 2.33.3**, 
 - `NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer`
 - `NODE_FUNCTION_ALLOW_EXTERNAL=luxon`
 - `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN` / `..._ALLOW_EXTERNAL` — same values; required since the JS Task Runner became the default in 2.22.5+
+- `N8N_RUNNERS_TASK_TIMEOUT=300` — **pinned deliberately.** n8n will lower this default to 60s in a future version, but `v5ParentMulti1` runs ~348s and `v5ChildPerSup1` ~151s; 60s would break the monthly cron.
+- `N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=268435456`, `N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=1000`, `N8N_UNVERIFIED_PACKAGES_ENABLED=false` — pre-adopted future defaults. Safe: no workflow uses compression/zip nodes, and every node is official `n8n-nodes-base.*`.
 - Mounts SA JSON at `/files/sa.json` for in-workflow JWT signing
 
-**Running a workflow from the CLI without stopping the container** (n8n 2.33.3+): the conflict is on Task Broker port **5679**, not 5678 —
+### Running a workflow from the CLI
+
+Use the helper on the NAS — **no container restart, no downtime**:
 
 ```bash
-sudo docker exec -e N8N_PORT=5699 \
-  -e N8N_RUNNERS_BROKER_PORT=5697 \
-  -e N8N_RUNNERS_TASK_BROKER_PORT=5697 \
-  n8n n8n execute --id=<WORKFLOW_ID>
+/volume1/docker/n8n/n8n-run.sh                  # no args -> usage + workflow list
+/volume1/docker/n8n/n8n-run.sh v6Tshirt1        # execute by ID
+
+# supplier re-run with a month override:
+OVERRIDE="-e OVERRIDE_MONTH_NAME=Apr 2026 -e OVERRIDE_MONTH_NAME_YY=Apr 26" \
+  /volume1/docker/n8n/n8n-run.sh v5ParentMulti1
 ```
+
+The non-obvious bit it handles: `n8n execute` boots a full instance and collides on the **Task Broker port 5679** — *not* 5678. The helper remaps both ports so the one-shot run coexists with production. This supersedes the old stop-container → `docker run --rm` → restart procedure.
 
 `.env` on NAS holds: `SHOPIFY_SHOP`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `N8N_BASIC_AUTH_PASSWORD`.
 
 ## Helper scripts
 
+- `n8n-run.sh` — execute any workflow from the CLI with zero downtime (see above). Deployed to `/volume1/docker/n8n/n8n-run.sh` on the NAS; versioned here so it survives a rebuild.
 - `apply_conditional_formatting.py` — manual fallback for applying conditional formatting + tab-to-front. Now redundant (built into v5 child), kept for debugging.
 - `archive/` — earlier iterations (v1/v2/v3) and ad-hoc debug scripts kept for history.
 

@@ -166,7 +166,7 @@ Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Bar
 
 **3. Sept 1, 2026 02:00 SGT cron** — first scheduled run on 2.33.3. Verify 8 child executions, 8 `Aug 2026 <Supplier> n8n` tabs, 8 run log entries, no 429s.
 
-**4. Optional — compose hardening.** Pin the three deprecation-warned env vars before a future n8n version flips their defaults (see the 2.33.3 upgrade entry below).
+**4. Optional — DB bloat.** `IfbOrdersToSheet1` holds 946 MB of the 1.09 GB execution data. Not urgent (disk is at 3%), and it's an IFB Brain workflow rather than this repo's, but it shares the n8n instance. Fix would be `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` scoped to that workflow, or trimming its payload.
 
 ## System health check — 2026-08-05
 
@@ -237,8 +237,28 @@ Note: workflow only appends. Re-runs do **not** delete previously matched rows t
 ## Resolved (was carryover)
 
 - ✅ **n8n upgraded 2.27.5 → 2.33.3** on 2026-08-05 (27 days before the Sept 1 cron — deliberate wide validation window). 16 DB migrations applied cleanly. All 10 workflows re-activated. Env vars survived the recreate (`NODE_FUNCTION_ALLOW_*`, `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_*`, SA mount at `/files/sa.json`, TZ `Asia/Taipei`). Smoke test: `v6Tshirt1` executed `status: success` — confirms JS Task Runner still loads `fs`/`crypto`/`https`/`luxon`; 9 rows written to `Tshirt Pre-orders`. Rollback image tagged `n8nio/n8n:rollback-2.27.5` (`sha256:07eb74b4...`). Backups: `database.sqlite{,-wal,-shm}.pre-2.33.3-2026-08-05.bak` + `docker-compose.yml.pre-2.33.bak`.
-  - **New in 2.33.3:** Python task runner attempts internal-mode start and fails (`Python 3 is missing`) — benign, we only use the JS runner, which registers fine. Deprecation warnings surfaced for `N8N_RUNNERS_TASK_TIMEOUT` (300 → 60s), `N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES` (2 GiB → 256 MiB), `N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES` (5000 → 1000). Set these explicitly in compose before a future version flips the defaults.
-  - **CLI gotcha (new):** `n8n execute` inside the running container conflicts on **Task Broker port 5679**, not 5678. Workaround that avoids stopping the container entirely: `docker exec -e N8N_PORT=5699 -e N8N_RUNNERS_BROKER_PORT=5697 -e N8N_RUNNERS_TASK_BROKER_PORT=5697 n8n n8n execute --id=<ID>`. Supersedes the old stop-container-first dance for smoke tests.
+  - **New in 2.33.3:** Python task runner attempts internal-mode start and fails (`Python 3 is missing`) — benign, we only use the JS runner, which registers fine.
+- ✅ **All n8n deprecation warnings cleared (2026-08-05)** — compose now pins every warned variable; startup log shows **zero** deprecations. Decisions were evidence-driven, not blanket-pinning:
+
+  | Variable | Set to | Why |
+  |---|---|---|
+  | `N8N_RUNNERS_TASK_TIMEOUT` | `300` (keep old) | **Kept permissive deliberately.** Future default is 60s, but `v5ParentMulti1` runs 348s and `v5ChildPerSup1` 151s — dropping to 60s risks breaking the monthly cron. |
+  | `N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES` | `268435456` (256 MiB — adopt new) | Audited all 10 workflows: **zero compression/zip nodes**. Pre-adopting the tighter default silences the warning *and* improves zip-bomb posture at no risk. |
+  | `N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES` | `1000` (adopt new) | Same — no compression nodes in use. |
+  | `N8N_UNVERIFIED_PACKAGES_ENABLED` | `false` (adopt new) | Every node across all workflows is official `n8n-nodes-base.*`; no community packages installed. |
+  | `WEBHOOK_URL` → `N8N_WEBHOOK_URL` | renamed | Straight rename, identical semantics (sets base URL for both test + production webhooks). |
+
+  Backups: `docker-compose.yml.pre-envpin-2026-08-05.bak`, `docker-compose.yml.pre-deprec2-2026-08-05.bak`.
+- ✅ **CLI runner helper `/volume1/docker/n8n/n8n-run.sh` (2026-08-05)** — `n8n execute` inside the running container conflicts on **Task Broker port 5679**, not 5678 as you'd expect. The helper overrides both the HTTP and broker ports so a one-shot execution coexists with production, **eliminating the old stop-container → `docker run --rm` → restart procedure** (and its downtime). Usage:
+
+  ```bash
+  /volume1/docker/n8n/n8n-run.sh                  # no args -> usage + workflow list
+  /volume1/docker/n8n/n8n-run.sh v6Tshirt1        # execute by ID
+  OVERRIDE="-e OVERRIDE_MONTH_NAME=Apr 2026" \
+    /volume1/docker/n8n/n8n-run.sh v5ParentMulti1 # with month-override env
+  ```
+
+  Verified end-to-end: `v6Tshirt1` → `status: success` in 18s, zero downtime.
 - ✅ **Aug 1 2026 cron clean (2026-08-01 02:00 SGT)** — last run on 2.27.5. 9/9 executions success, 337 rows across 8 suppliers, 5m47s end-to-end.
 - ✅ **Folder Grants prerequisites completed (2026-08-05)** — Drive API enabled, SA granted Editor on Mega Barrett SMC Release, 3 sheet tabs created + seeded, workflow imported as `v7FolderGrant1`. Dry run still outstanding.
 
