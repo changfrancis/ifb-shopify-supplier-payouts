@@ -1,10 +1,26 @@
-# Status — production live, July 1 2026 cron fired successfully (2nd scheduled run on 2.27.5)
+# Status — production live, Aug 1 2026 cron clean; n8n upgraded to 2.33.3
 
 ## Production state
 
 Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v4 retired.
 
-**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-07-01 02:00 SGT** (first scheduled cron on n8n 2.27.5 — all 8 suppliers appended cleanly, +30 total rows for June 29–30 orders, ~4 min end-to-end). **Next firing: August 1, 2026 02:00 SGT.**
+**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-08-01 02:00 SGT** — clean run on 2.27.5, 9/9 executions success (1 parent + 8 children), all 8 `Jul 2026 <Supplier> n8n` tabs + run logs written in 5m47s (02:00:00 → 02:05:47). **Next firing: September 1, 2026 02:00 SGT** (first scheduled cron on 2.33.3).
+
+### Jul 2026 cron output (2026-08-01 02:00 SGT)
+
+| Supplier | Rows | Flags |
+|---|---:|---|
+| Stan | 1 | clean |
+| Piggy | 17 | clean |
+| Bluebird | 4 | TITLE MATCH=2 |
+| Ryan | 135 | TITLE MATCH=32, REFUND=8 |
+| Bryan | 3 | clean |
+| Dylan | 18 | TITLE MATCH=1 |
+| Gavin | 158 | TITLE MATCH=40, REFUND=11 |
+| Vitae | 1 | clean |
+| **Total** | **337** | |
+
+⚠️ Ryan (32) and Gavin (40) title-match counts remain high — same suspected Shopify SKU-rename pattern flagged after June. SKU audit for both still pending.
 
 | Supplier | Active | Latest verified | Status | Title hints | Excludes |
 |---|---|---|---|---|---|
@@ -57,11 +73,18 @@ Manual Jun 2026 run done 2026-06-29 ahead of the July 1 cron, then two targeted 
 ## Workflows in n8n
 
 ```
-n8n list:workflow
-  ShopifyErrHandle1     Shopify Sync — Error Handler           ACTIVE
-  v5ChildPerSup1        Shopify Per-Supplier Sync v1 (child)   ACTIVE
-  v5ParentMulti1        Shopify Multi-Supplier Sync v1 (parent) ACTIVE  ← cron 0 2 1 * * SGT
-  v6Tshirt1             Shopify Tshirt Pre-orders v1           INACTIVE  ← manual trigger, on-demand
+n8n list:workflow   (as of 2026-08-05, n8n 2.33.3)
+  ShopifyErrHandle1     Shopify Sync — Error Handler            ACTIVE
+  v5ChildPerSup1        Shopify Per-Supplier Sync v1 (child)    ACTIVE
+  v5ParentMulti1        Shopify Multi-Supplier Sync v1 (parent) ACTIVE    ← cron 0 2 1 * * SGT
+  v6Tshirt1             Shopify Tshirt Pre-orders v1            INACTIVE  ← manual trigger, on-demand
+  v7FolderGrant1        Shopify Folder Grants v1                INACTIVE  ← imported 2026-08-05, dry run pending
+  --- non-supplier workflows sharing this n8n instance ---
+  EmailReqToDash1       Email Heads-up → Ops Dashboard          ACTIVE
+  IfbReplyDrafter1      IFB Reply Drafter (scheduled batch)     ACTIVE
+  IfbShopifySync1       IFB Brain: nightly Shopify sync         ACTIVE
+  IfbFeedbackFwd1       IFB Brain: forward review verdicts      ACTIVE
+  IfbOrdersToSheet1     IFB Orders -> Google Sheet              ACTIVE
 ```
 
 v1 (`KT4gqTWzWIoYtQpC`) and v4 (`Pn8M3kQrZb2WyT5j`) deleted from DB on 2026-05-02 (post-convergence cleanup).
@@ -80,6 +103,26 @@ Standalone workflow for the custom-printed pre-order t-shirt product (SKU `nerfs
 - **Last verified run:** 2026-06-01 (post n8n 2.22.5 upgrade) — 32 orders pulled including a May 7 pre-order (5076), Order 4997 `Deez🥜` + Order 4996 `DuncanRyuu🇸🇬` flagged NON-ASCII, qty expansion verified, 2 CF rules stable. Tab leftmost in [internal sheet](https://docs.google.com/spreadsheets/d/1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM/edit#gid=1367981525).
 
 Container TZ: `Asia/Taipei` (verified inside container).
+
+## Folder Grants automation (v7) — pending go-live
+
+Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Barrett SMC Release) to customers who buy the tagged SKU. Sharer identity is the existing service account (`n8n-sheets@ifb-n8n-integration.iam.gserviceaccount.com` — SA key reused, no new OAuth); Google sends its default "shared with you" notification email to the customer.
+
+- **Trigger:** cron `*/15 * * * *` Asia/Singapore + manual trigger for testing.
+- **Config location:** three new tabs on the internal sheet `1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM`:
+  - `Folder Grants` — `SKU | Folder ID | Folder Name | Role | Active | Notes` (mapping table).
+  - `Folder Grants Log` — `Timestamp | Order No | Customer Email | SKU matched | Folder ID | Folder Name | Status | Message`. Status ∈ `SHARED` / `ALREADY_SHARED` / `ERROR` / `NO_EMAIL`. Doubles as dedup source.
+  - `Folder Grants Cursor` — `A2` holds `last_processed_iso` (updated_at high-water mark). Missing/empty → first run defaults to `now - CURSOR_FALLBACK_HOURS` (1h) to avoid scanning the whole store.
+- **Prerequisites (one-time, not yet done):**
+  1. Gavin adds the service-account email (Editor role) on each folder we want auto-shared. Confirmed targets available today: `Mega Barrett SMC Release` (`1MsyG4satjsITzwrTjqyjGwV9TMwpK87n`), `SBL2 (Release)` (`1UD3O2A_ub9fyYvMG9Hb1vZ1uzgVNIwmw`), `SBF (Release)` (`1jcHNC7modnlKCUUHd81Nts7h4ZjwUJMz`).
+  2. Enable Drive API on the `ifb-n8n-integration` GCP project (Sheets is enabled; Drive is a separate enablement).
+- **Real Mega Barrett SMC SKUs to seed into `Folder Grants`:** `MegaSMC-3dparts-BRT-XXXX`, `MegaSMC-3dparts-CQB-xxxx`, `MegaSMC-hwkit-grey`, `MegaSMC-hwkit-red`. All → Mega Barrett SMC Release folder.
+- **Enhanced SKU placeholder rule (vs v5):** matches `COLOUR` (any case) OR any run of 3+ x's / X's. Handles the `XXXX`/`xxxx` colour placeholders on the Mega Barrett SKUs and any future 4+-X SKUs. Treats `-`/`_` interchangeably. v5's stricter `XXX`-only rule is unchanged and continues to drive the monthly pipeline.
+- **Idempotency:** cursor prevents re-scanning old orders; log dedups within the cursor window by `(order_no, email, folder_id)`. Cursor only advances *after* the log append succeeds — a mid-batch failure re-processes the same window on the next tick, and log-based dedup makes that safe.
+- **Auth note (non-obvious):** the workflow's JWT requests **both** `spreadsheets` and `drive` scopes in one token. The existing pipeline still requests spreadsheets-only tokens from the same SA key — unaffected.
+- **Status (2026-08-05):** ✅ Drive API enabled on GCP. ✅ SA added as Editor on Mega Barrett SMC Release. ✅ Three tabs created on internal sheet + seeded with the 4 Mega Barrett SKU rows (Active=TRUE). ✅ Workflow imported into n8n as `v7FolderGrant1` (11 nodes) — **INACTIVE**, not yet executed.
+- **⚠️ Next step — dry run NOT yet done.** Executing this workflow grants real Drive access and triggers Google's notification email to real customers. Per the approved plan, run first against a throwaway test folder before flipping `Active` on in n8n. Cursor is blank, so the first run scans `now − 1h` of paid orders.
+- **Out of scope initially:** refund/cancellation does NOT revoke Drive access; no historical backfill for orders placed before go-live.
 
 ## Conditional formatting (auto-applied per run)
 
@@ -111,12 +154,48 @@ Container TZ: `Asia/Taipei` (verified inside container).
 
 ## Resume here
 
-Production validation when **July 1, 2026 02:00 SGT** cron fires. Verify:
-- 8 child sub-workflow executions (one per active supplier)
-- 8 monthly tabs `Jun 2026 <Supplier> n8n` created in internal sheet
-- 8 Run Log entries appended
-- No 429 rate-limit errors
-- Code nodes still load `fs`/`crypto`/`https`/`luxon` correctly under n8n 2.22.5 JS Task Runner (first scheduled-cron run on the new version — manual smoke test on v6Tshirt1 already passed)
+**1. Folder Grants dry run (blocking go-live).** `v7FolderGrant1` is imported but INACTIVE and never executed. Executing it grants real Drive access and fires Google's notification email to real customers — so per the approved plan, dry-run against a throwaway test folder first:
+   - Create a test folder in your own Drive, add the SA as Editor.
+   - Temporarily point a Folder Grants row at that test folder ID using a cheap real SKU.
+   - Execute: `docker exec -e N8N_PORT=5699 -e N8N_RUNNERS_BROKER_PORT=5697 -e N8N_RUNNERS_TASK_BROKER_PORT=5697 n8n n8n execute --id=v7FolderGrant1`
+   - Verify: (a) test folder's share list gained the order email, (b) `Folder Grants Log` shows one `SHARED` row, (c) `Folder Grants Cursor!A2` advanced.
+   - Re-run with the cursor rolled back → expect `ALREADY_SHARED`, no duplicate permission.
+   - Only then restore the real folder ID and activate the workflow.
+
+**2. SKU audit for Ryan + Gavin.** Jul 2026 had 32 and 40 title-match rows respectively — carried over unresolved from June. Likely bulk Shopify SKU renames leaving dead refs in their Amount References (same failure mode as the Bryan sling SKUs, which were silently dropping 6 sales/month until audited).
+
+**3. Sept 1, 2026 02:00 SGT cron** — first scheduled run on 2.33.3. Verify 8 child executions, 8 `Aug 2026 <Supplier> n8n` tabs, 8 run log entries, no 429s.
+
+**4. Optional — compose hardening.** Pin the three deprecation-warned env vars before a future n8n version flips their defaults (see the 2.33.3 upgrade entry below).
+
+## System health check — 2026-08-05
+
+| Check | Result |
+|---|---|
+| Disk `/volume1` | 160 GB / 7.0 TB — **3%** |
+| Memory | 3.6 GB used / 11 GB, 6.7 GB available |
+| Uptime | 17 days, load 1.53 (IO-bound, CPU 0.10) |
+| n8n health | `{"status":"ok"}` |
+| Execution pruning | Active (14-day default), oldest execution 2026-07-21 |
+| v5 pipeline errors | **Zero** |
+
+**⚠️ DB bloat — `IfbOrdersToSheet1` is the driver (not the supplier pipeline).** SQLite is 1.28 GB; execution payloads break down as:
+
+```
+IfbOrdersToSheet1     70 execs    946.2 MB   ← 87% of all execution data (13.8 MB/run, every ~3h)
+EmailReqToDash1      387 execs     62.2 MB
+v5ParentMulti1         1 exec      31.7 MB
+v5ChildPerSup1         8 execs     29.9 MB
+IfbShopifySync1       14 execs     15.5 MB
+IfbFeedbackFwd1      675 execs      1.4 MB
+IfbReplyDrafter1      69 execs       0.7 MB
+ShopifyErrHandle1     33 execs       0.1 MB
+TOTAL                            1,087.7 MB
+```
+
+VACUUM won't help — only 17 MB (1.3%) is reclaimable. Fix would be `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` scoped to `IfbOrdersToSheet1`, or trimming its payload. Not urgent at 3% disk usage. **Out of scope for this repo** (IFB Brain workflow), logged here because it shares the n8n instance.
+
+**Failed executions (both outside the supplier pipeline):** `IfbFeedbackFwd1` 2026-08-04 15:00, `IfbOrdersToSheet1` 2026-07-29 01:00. The Shopify Error Handler fired 33 times, all triggered by IFB Brain workflows.
 
 ## Open carryover items
 
@@ -156,6 +235,12 @@ n8n CLI `execute` cannot share port 5679 with the running container, so:
 Note: workflow only appends. Re-runs do **not** delete previously matched rows that are now excluded — manual deletion required for those.
 
 ## Resolved (was carryover)
+
+- ✅ **n8n upgraded 2.27.5 → 2.33.3** on 2026-08-05 (27 days before the Sept 1 cron — deliberate wide validation window). 16 DB migrations applied cleanly. All 10 workflows re-activated. Env vars survived the recreate (`NODE_FUNCTION_ALLOW_*`, `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_*`, SA mount at `/files/sa.json`, TZ `Asia/Taipei`). Smoke test: `v6Tshirt1` executed `status: success` — confirms JS Task Runner still loads `fs`/`crypto`/`https`/`luxon`; 9 rows written to `Tshirt Pre-orders`. Rollback image tagged `n8nio/n8n:rollback-2.27.5` (`sha256:07eb74b4...`). Backups: `database.sqlite{,-wal,-shm}.pre-2.33.3-2026-08-05.bak` + `docker-compose.yml.pre-2.33.bak`.
+  - **New in 2.33.3:** Python task runner attempts internal-mode start and fails (`Python 3 is missing`) — benign, we only use the JS runner, which registers fine. Deprecation warnings surfaced for `N8N_RUNNERS_TASK_TIMEOUT` (300 → 60s), `N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES` (2 GiB → 256 MiB), `N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES` (5000 → 1000). Set these explicitly in compose before a future version flips the defaults.
+  - **CLI gotcha (new):** `n8n execute` inside the running container conflicts on **Task Broker port 5679**, not 5678. Workaround that avoids stopping the container entirely: `docker exec -e N8N_PORT=5699 -e N8N_RUNNERS_BROKER_PORT=5697 -e N8N_RUNNERS_TASK_BROKER_PORT=5697 n8n n8n execute --id=<ID>`. Supersedes the old stop-container-first dance for smoke tests.
+- ✅ **Aug 1 2026 cron clean (2026-08-01 02:00 SGT)** — last run on 2.27.5. 9/9 executions success, 337 rows across 8 suppliers, 5m47s end-to-end.
+- ✅ **Folder Grants prerequisites completed (2026-08-05)** — Drive API enabled, SA granted Editor on Mega Barrett SMC Release, 3 sheet tabs created + seeded, workflow imported as `v7FolderGrant1`. Dry run still outstanding.
 
 - ✅ **n8n upgraded 2.17.8 → 2.22.5** on 2026-06-01 (post-cron). 6 DB migrations applied cleanly. Removed deprecated `N8N_RUNNERS_ENABLED=false` from compose. Code nodes still work — JS Task Runner uses `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer` (already set). DB backup at `/home/node/.n8n/database.sqlite.pre-upgrade-2026-06-01.bak` (1.07 GB); compose backup at `/volume1/docker/n8n/docker-compose.yml.pre-2.22.5.bak`. Smoke test: v6Tshirt1 re-run successful (32 rows, 2 CF rules, emoji preserved).
 - ✅ **n8n upgraded 2.22.5 → 2.27.5** on 2026-06-30 (~15 hours before July 1 cron). No DB migrations needed (2.22.5 already current schema). All 3 active workflows re-activated cleanly. Smoke test v6Tshirt1 passed (10 rows, 2 CF rules, JS Task Runner working with fs/crypto/https/luxon). DB backup at `/volume1/docker/n8n/n8n_data/database.sqlite.pre-2.27.5-2026-06-30.bak`.

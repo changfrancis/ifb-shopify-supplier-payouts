@@ -1,0 +1,201 @@
+{
+  "id": "v7FolderGrant1",
+  "name": "Shopify Folder Grants v1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {"field": "cronExpression", "expression": "*/15 * * * *"}
+          ]
+        }
+      },
+      "id": "fg-trig-cron",
+      "name": "Cron Trigger (every 15 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 220]
+    },
+    {
+      "parameters": {},
+      "id": "fg-trig-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "p-sheet",    "name": "INTERNAL_SHEET_ID",     "value": "1Fgs7XfYZ3_YCinVF4PoPpqALA4quciOANNZ3SYixBNM", "type": "string"},
+            {"id": "p-grants",   "name": "GRANTS_TAB_NAME",       "value": "Folder Grants", "type": "string"},
+            {"id": "p-log",      "name": "LOG_TAB_NAME",          "value": "Folder Grants Log", "type": "string"},
+            {"id": "p-cursor",   "name": "CURSOR_TAB_NAME",       "value": "Folder Grants Cursor", "type": "string"},
+            {"id": "p-api",      "name": "SHOPIFY_API_VERSION",   "value": "2026-04", "type": "string"},
+            {"id": "p-fallback", "name": "CURSOR_FALLBACK_HOURS", "value": "1", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "fg-set-params",
+      "name": "Set Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/oauth/access_token",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "grant_type",    "value": "client_credentials"},
+            {"name": "client_id",     "value": "={{ $env.SHOPIFY_CLIENT_ID }}"},
+            {"name": "client_secret", "value": "={{ $env.SHOPIFY_CLIENT_SECRET }}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "fg-shopify-token",
+      "name": "Get Shopify Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.INTERNAL_SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.CURSOR_TAB_NAME }}", "mode": "name"},
+        "options": {"returnFirstMatch": false}
+      },
+      "id": "fg-read-cursor",
+      "name": "Read Cursor",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [860, 300],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.INTERNAL_SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.GRANTS_TAB_NAME }}", "mode": "name"},
+        "options": {"returnFirstMatch": false}
+      },
+      "id": "fg-read-grants",
+      "name": "Read Folder Grants",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1080, 300],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "authentication": "serviceAccount",
+        "documentId": {"__rl": true, "value": "={{ $('Set Parameters').first().json.INTERNAL_SHEET_ID }}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{ $('Set Parameters').first().json.LOG_TAB_NAME }}", "mode": "name"},
+        "options": {"returnFirstMatch": false}
+      },
+      "id": "fg-read-log",
+      "name": "Read Folder Grants Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1300, 300],
+      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ Resolve Cursor (fallback = NOW - CURSOR_FALLBACK_HOURS) ============\n// Empty/missing cursor → default to (now - N hours). Prevents a first-run scanning\n// the entire store. Passed to Fetch Orders as updated_at_min.\n\nconst params = $('Set Parameters').first().json;\nconst rows = $('Read Cursor').all().map(it => it.json).filter(r => r && Object.keys(r).length > 0);\n\nlet cursor = '';\nfor (const r of rows) {\n  const keys = Object.keys(r).filter(k => k !== 'row_number');\n  const v = keys.length ? String(r[keys[0]] || '').trim() : '';\n  if (v && !/^last_processed_iso$/i.test(v)) { cursor = v; break; }\n}\n\nif (!cursor) {\n  const fallbackHours = parseFloat(params.CURSOR_FALLBACK_HOURS || '1') || 1;\n  const d = new Date(Date.now() - fallbackHours * 3600 * 1000);\n  cursor = d.toISOString();\n}\n\nreturn [{ json: { cursor } }];\n"
+      },
+      "id": "fg-resolve-cursor",
+      "name": "Resolve Cursor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_SHOP }}.myshopify.com/admin/api/{{ $('Set Parameters').first().json.SHOPIFY_API_VERSION }}/orders.json?status=any&financial_status=paid&limit=250&updated_at_min={{ encodeURIComponent($('Resolve Cursor').first().json.cursor) }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "X-Shopify-Access-Token", "value": "={{ $('Get Shopify Token').first().json.access_token }}"}]},
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers.link && $response.headers.link.includes('rel=\"next\"') ? $response.headers.link.match(/<([^>]+)>;\\s*rel=\"next\"/)[1] : '' }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}",
+              "limitPagesFetched": false
+            }
+          },
+          "retry": {"enabled": true, "maxTries": 3, "waitBetweenTries": 2000}
+        }
+      },
+      "id": "fg-fetch-orders",
+      "name": "Fetch Orders (paginated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ Build Grant Intents ============\n// For each paid order × line item, match SKU against Folder Grants (Active=TRUE),\n// pull customer email, dedup within batch AND against Folder Grants Log.\n// Also compute batch_max_updated_at for cursor advancement (regardless of matches).\n\nfunction escRegex(s) { return String(s).replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&'); }\n\n// Enhanced placeholder rule (vs v5's XXX-only, case-sensitive): match COLOUR (any case)\n// or any run of 3+ x's / X's. Handles MegaSMC-3dparts-BRT-XXXX, MegaSMC-3dparts-CQB-xxxx,\n// gfz-sbl2-COLOUR, etc. — treats -/_ interchangeably, case-insensitive final match.\nfunction skuToRegex(sku) {\n  const pat = '^' + escRegex(sku)\n    .replace(/COLOUR/gi, '.+')\n    .replace(/x{3,}/gi, '.+')\n    .replace(/[-_]/g, '[-_]') + '$';\n  return new RegExp(pat, 'i');\n}\n\n// ----- Load Folder Grants (active rows only) -----\nconst grantsRaw = $('Read Folder Grants').all().map(it => it.json);\nconst grants = [];\nfor (const r of grantsRaw) {\n  const sku = String(r['SKU'] || '').trim();\n  const folderId = String(r['Folder ID'] || '').trim();\n  if (!sku || !folderId) continue;\n  const active = String(r['Active'] || '').trim().toUpperCase();\n  if (active && active !== 'TRUE') continue;\n  grants.push({\n    sku,\n    folder_id: folderId,\n    folder_name: String(r['Folder Name'] || '').trim(),\n    role: (String(r['Role'] || 'reader').trim().toLowerCase()) || 'reader',\n    re: skuToRegex(sku),\n  });\n}\n\n// ----- Load existing Log for dedup (SHARED + ALREADY_SHARED count as done) -----\nconst logRaw = $('Read Folder Grants Log').all().map(it => it.json);\nconst doneKeys = new Set();\nfor (const r of logRaw) {\n  const status = String(r['Status'] || '').trim().toUpperCase();\n  if (status !== 'SHARED' && status !== 'ALREADY_SHARED') continue;\n  const orderNo = String(r['Order No'] || '').trim();\n  const email = String(r['Customer Email'] || '').trim().toLowerCase();\n  const folderId = String(r['Folder ID'] || '').trim();\n  if (!orderNo || !email || !folderId) continue;\n  doneKeys.add(orderNo + '|' + email + '|' + folderId);\n}\n\n// ----- Fetch orders -----\nconst pages = $('Fetch Orders (paginated)').all();\nconst orders = pages.flatMap(p => (p.json && p.json.orders) ? p.json.orders : []);\n\n// ----- Compute batch_max_updated_at for cursor -----\nlet maxUpdatedMs = 0;\nfor (const o of orders) {\n  const t = Date.parse(o.updated_at || o.created_at || '');\n  if (!isNaN(t) && t > maxUpdatedMs) maxUpdatedMs = t;\n}\nconst batchMaxIso = maxUpdatedMs > 0 ? new Date(maxUpdatedMs + 1000).toISOString() : ''; // +1s to avoid re-fetching the same row next tick\n\n// ----- Build intents -----\nconst intents = [];\nconst seenBatch = new Set();\nfor (const o of orders) {\n  const orderNo = o.order_number != null ? String(o.order_number) : String(o.name || '').replace('#','');\n  const email = String((o.customer && o.customer.email) || o.email || o.contact_email || '').trim().toLowerCase();\n  const orderUpdatedAt = o.updated_at || o.created_at || '';\n\n  for (const li of (o.line_items || [])) {\n    const sku = String(li.sku || '').trim();\n    if (!sku) continue;\n    const matched = grants.filter(g => g.re.test(sku));\n    if (matched.length === 0) continue;\n\n    for (const g of matched) {\n      // Missing email → log ERROR row with no Drive call\n      if (!email) {\n        const k = orderNo + '|NOEMAIL|' + g.folder_id;\n        if (seenBatch.has(k)) continue;\n        seenBatch.add(k);\n        intents.push({\n          order_no: orderNo,\n          sku,\n          email: '',\n          folder_id: g.folder_id,\n          folder_name: g.folder_name,\n          role: g.role,\n          order_updated_at: orderUpdatedAt,\n          _skip_reason: 'no email on order',\n        });\n        continue;\n      }\n\n      const key = orderNo + '|' + email + '|' + g.folder_id;\n      if (seenBatch.has(key)) continue;\n      if (doneKeys.has(key)) continue;\n      seenBatch.add(key);\n\n      intents.push({\n        order_no: orderNo,\n        sku,\n        email,\n        folder_id: g.folder_id,\n        folder_name: g.folder_name,\n        role: g.role,\n        order_updated_at: orderUpdatedAt,\n      });\n    }\n  }\n}\n\nconst dbg = {\n  orders_fetched: orders.length,\n  active_grants: grants.length,\n  done_keys_loaded: doneKeys.size,\n  intents_built: intents.length,\n  batch_max_updated_iso: batchMaxIso,\n};\nconsole.log('[folder-grant intents]', JSON.stringify(dbg));\n\n// Always emit at least one item so downstream nodes fire (cursor still advances\n// even when 0 intents matched). Sentinel item carries only the cursor.\nif (intents.length === 0) {\n  return [{ json: { _sentinel: true, batch_max_updated_iso: batchMaxIso } }];\n}\n// Attach batch cursor to every intent so the grant node can pick it up regardless of order\nreturn intents.map(i => ({ json: { ...i, batch_max_updated_iso: batchMaxIso } }));\n"
+      },
+      "id": "fg-build-intents",
+      "name": "Build Grant Intents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ============ Grant + Log + Advance Cursor ============\n// Signs one JWT (dual scope: sheets + drive), then:\n//  (a) For each real intent → POST to Drive permissions.create (sendNotificationEmail=true),\n//      Google emails the customer the standard 'shared with you' notice.\n//  (b) Appends one Folder Grants Log row per intent (SHARED / ALREADY_SHARED / ERROR /\n//      NO_EMAIL). Sentinel-only batches skip (a) and (b).\n//  (c) Overwrites Folder Grants Cursor!A2 with batch_max_updated_iso (only if > current).\n// Cursor advances only AFTER log append succeeds so we never lose an order on partial failure.\n\nconst fs = require('fs');\nconst crypto = require('crypto');\nconst https = require('https');\n\nfunction b64u(buf) { return Buffer.from(buf).toString('base64').replace(/=+$/,'').replace(/\\+/g,'-').replace(/\\//g,'_'); }\nfunction signJWT(saJson, scope) {\n  const now = Math.floor(Date.now() / 1000);\n  const header  = { alg: 'RS256', typ: 'JWT' };\n  const payload = { iss: saJson.client_email, scope, aud: 'https://oauth2.googleapis.com/token', exp: now + 3600, iat: now };\n  const si = b64u(JSON.stringify(header)) + '.' + b64u(JSON.stringify(payload));\n  const signer = crypto.createSign('RSA-SHA256');\n  signer.update(si);\n  return si + '.' + b64u(signer.sign(saJson.private_key));\n}\nfunction httpsReq(opts, body) {\n  return new Promise((resolve, reject) => {\n    const req = https.request(opts, res => { let d=''; res.on('data', c => d+=c); res.on('end', () => resolve({ statusCode: res.statusCode, body: d })); });\n    req.on('error', reject);\n    if (body) req.write(body);\n    req.end();\n  });\n}\nasync function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }\nasync function httpsReqRetry(opts, body) {\n  const maxTries = 4;\n  for (let attempt = 0; attempt < maxTries; attempt++) {\n    const res = await httpsReq(opts, body);\n    if (res.statusCode !== 429 && res.statusCode < 500) return res;\n    if (attempt === maxTries - 1) return res;\n    await sleep(Math.min(2000 * Math.pow(2, attempt), 15000));\n  }\n}\nasync function getToken(saJson) {\n  const jwt = signJWT(saJson, 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive');\n  const body = 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=' + encodeURIComponent(jwt);\n  const r = await httpsReqRetry({\n    hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST',\n    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },\n  }, body);\n  if (r.statusCode !== 200) throw new Error('token: ' + r.statusCode + ' ' + r.body);\n  return JSON.parse(r.body).access_token;\n}\n\nconst params  = $('Set Parameters').first().json;\nconst sa      = JSON.parse(fs.readFileSync($env.N8N_GOOGLE_SA_JSON || '/files/sa.json', 'utf8'));\nconst tok     = await getToken(sa);\nconst ssId    = params.INTERNAL_SHEET_ID;\nconst logTab  = params.LOG_TAB_NAME;\nconst curTab  = params.CURSOR_TAB_NAME;\n\nconst items = $input.all().map(it => it.json);\n// batch cursor is on every item (all carry the same value) — take first non-empty\nlet batchCursor = '';\nfor (const i of items) { if (i && i.batch_max_updated_iso) { batchCursor = i.batch_max_updated_iso; break; } }\nconst realIntents = items.filter(i => i && !i._sentinel && i.folder_id);\n\nconst nowIso = new Date().toISOString();\nconst logRows = [];\n\n// ----- (a) Drive shares (or NO_EMAIL log rows) -----\nfor (const i of realIntents) {\n  if (i._skip_reason) {\n    logRows.push([nowIso, i.order_no, '', i.sku, i.folder_id, i.folder_name || '', 'NO_EMAIL', i._skip_reason]);\n    continue;\n  }\n  const body = JSON.stringify({ role: i.role || 'reader', type: 'user', emailAddress: i.email });\n  const r = await httpsReqRetry({\n    hostname: 'www.googleapis.com',\n    path: '/drive/v3/files/' + encodeURIComponent(i.folder_id) + '/permissions?sendNotificationEmail=true&supportsAllDrives=true',\n    method: 'POST',\n    headers: {\n      'Authorization': 'Bearer ' + tok,\n      'Content-Type': 'application/json',\n      'Content-Length': Buffer.byteLength(body),\n    },\n  }, body);\n\n  let status, message;\n  if (r.statusCode === 200 || r.statusCode === 201) {\n    status = 'SHARED';\n    message = '';\n  } else if ((r.statusCode === 400 || r.statusCode === 409) && /already|exist|dup/i.test(r.body)) {\n    status = 'ALREADY_SHARED';\n    message = 'permission exists';\n  } else {\n    status = 'ERROR';\n    message = ('HTTP ' + r.statusCode + ': ' + r.body).slice(0, 500);\n  }\n  logRows.push([nowIso, i.order_no, i.email, i.sku, i.folder_id, i.folder_name || '', status, message]);\n}\n\n// ----- (b) Append to Folder Grants Log -----\nlet appendedRows = 0;\nif (logRows.length > 0) {\n  const body = JSON.stringify({ values: logRows });\n  const path = '/v4/spreadsheets/' + ssId + '/values/' + encodeURIComponent(logTab) + '!A:H:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';\n  const r = await httpsReqRetry({\n    hostname: 'sheets.googleapis.com', path, method: 'POST',\n    headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },\n  }, body);\n  if (r.statusCode !== 200) throw new Error('log append: ' + r.statusCode + ' ' + r.body);\n  appendedRows = logRows.length;\n}\n\n// ----- (c) Advance cursor (only after log append succeeded) -----\nlet cursorAdvancedTo = '';\nif (batchCursor) {\n  const body = JSON.stringify({ values: [[batchCursor]] });\n  const path = '/v4/spreadsheets/' + ssId + '/values/' + encodeURIComponent(curTab) + '!A2?valueInputOption=USER_ENTERED';\n  const r = await httpsReqRetry({\n    hostname: 'sheets.googleapis.com', path, method: 'PUT',\n    headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },\n  }, body);\n  if (r.statusCode !== 200) throw new Error('cursor update: ' + r.statusCode + ' ' + r.body);\n  cursorAdvancedTo = batchCursor;\n}\n\nreturn [{ json: {\n  status: 'success',\n  intents_processed: realIntents.length,\n  log_rows_appended: appendedRows,\n  cursor_advanced_to: cursorAdvancedTo,\n  shared: logRows.filter(r => r[6] === 'SHARED').length,\n  already_shared: logRows.filter(r => r[6] === 'ALREADY_SHARED').length,\n  errors: logRows.filter(r => r[6] === 'ERROR').length,\n  no_email: logRows.filter(r => r[6] === 'NO_EMAIL').length,\n} }];\n"
+      },
+      "id": "fg-grant-log-cursor",
+      "name": "Grant + Log + Advance Cursor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2180, 300],
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Cron Trigger (every 15 min)": { "main": [[ { "node": "Set Parameters",            "type": "main", "index": 0 } ]] },
+    "Manual Trigger":              { "main": [[ { "node": "Set Parameters",            "type": "main", "index": 0 } ]] },
+    "Set Parameters":              { "main": [[ { "node": "Get Shopify Token",         "type": "main", "index": 0 } ]] },
+    "Get Shopify Token":           { "main": [[ { "node": "Read Cursor",               "type": "main", "index": 0 } ]] },
+    "Read Cursor":                 { "main": [[ { "node": "Read Folder Grants",        "type": "main", "index": 0 } ]] },
+    "Read Folder Grants":          { "main": [[ { "node": "Read Folder Grants Log",    "type": "main", "index": 0 } ]] },
+    "Read Folder Grants Log":      { "main": [[ { "node": "Resolve Cursor",            "type": "main", "index": 0 } ]] },
+    "Resolve Cursor":              { "main": [[ { "node": "Fetch Orders (paginated)",  "type": "main", "index": 0 } ]] },
+    "Fetch Orders (paginated)":    { "main": [[ { "node": "Build Grant Intents",       "type": "main", "index": 0 } ]] },
+    "Build Grant Intents":         { "main": [[ { "node": "Grant + Log + Advance Cursor","type": "main", "index": 0 } ]] }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1", "errorWorkflow": "ShopifyErrHandle1", "timezone": "Asia/Singapore"},
+  "tags": []
+}

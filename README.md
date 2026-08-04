@@ -32,7 +32,8 @@ Runs on a Synology NAS in Docker (`n8nio/n8n:latest`).
 | `n8n-workflow-shopify-multi-supplier-parent-import.json` | **v5 parent** — Loads Suppliers Registry, fetches Shopify once, dispatches per-supplier child. Cron: `0 2 1 * *` SGT. |
 | `n8n-workflow-shopify-per-supplier-child-import.json` | **v5 child** — Per-supplier pipeline: read Amount Ref + Walkin, match, append, format. Triggered via `Execute Workflow` from parent. |
 | `n8n-workflow-shopify-tshirt-preorder-import.json` | **v6** — On-demand t-shirt pre-order extraction. Pulls last 60 days of orders matching `nerfsg-tshirt-custom-*`, writes the overwriting `Tshirt Pre-orders` tab for handover to the t-shirt printer. Manual trigger only. |
-| `n8n-workflow-error-handler.json` | Workflow-level failure catcher (wired as Error Workflow on v5 + v6). |
+| `n8n-workflow-shopify-folder-grant-import.json` | **v7** — Auto-shares mapped Google Drive release folders (e.g. Mega Barrett SMC) to customers who buy a tagged SKU. Cron every 15 min + manual trigger. Uses the existing service account (dual scope: sheets + drive). Config lives on the internal sheet in `Folder Grants` / `Folder Grants Log` / `Folder Grants Cursor` tabs. |
+| `n8n-workflow-error-handler.json` | Workflow-level failure catcher (wired as Error Workflow on v5 + v6 + v7). |
 
 ## Suppliers Registry
 
@@ -70,12 +71,22 @@ v4 and v5 share one canonical pipeline; only data sources differ. **Any fix to m
 
 ## Deployment
 
-Container: `n8nio/n8n:latest` on Synology DSM Docker. Compose file (NAS-only, not in repo) sets:
+Container: `n8nio/n8n:latest` on Synology DSM Docker (currently **n8n 2.33.3**, upgraded 2026-08-05). Compose file (NAS-only, not in repo) sets:
 
-- `N8N_RUNNERS_ENABLED=false` + `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`
+- `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`
 - `NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer`
 - `NODE_FUNCTION_ALLOW_EXTERNAL=luxon`
+- `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_BUILTIN` / `..._ALLOW_EXTERNAL` — same values; required since the JS Task Runner became the default in 2.22.5+
 - Mounts SA JSON at `/files/sa.json` for in-workflow JWT signing
+
+**Running a workflow from the CLI without stopping the container** (n8n 2.33.3+): the conflict is on Task Broker port **5679**, not 5678 —
+
+```bash
+sudo docker exec -e N8N_PORT=5699 \
+  -e N8N_RUNNERS_BROKER_PORT=5697 \
+  -e N8N_RUNNERS_TASK_BROKER_PORT=5697 \
+  n8n n8n execute --id=<WORKFLOW_ID>
+```
 
 `.env` on NAS holds: `SHOPIFY_SHOP`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `N8N_BASIC_AUTH_PASSWORD`.
 
