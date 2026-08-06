@@ -16,11 +16,11 @@ Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v
 | Ryan | 135 | TITLE MATCH=32, REFUND=8 |
 | Bryan | 3 | clean |
 | Dylan | 18 | TITLE MATCH=1 |
-| Gavin | 158 | TITLE MATCH=40, REFUND=11 |
+| Gavin | 159 | TITLE MATCH=5, REFUND=11 — **rebuilt 2026-08-06**, was 158 rows / 40 title-match |
 | Vitae | 1 | clean |
-| **Total** | **337** | |
+| **Total** | **338** | |
 
-⚠️ Ryan (32) and Gavin (40) title-match counts remain high — same suspected Shopify SKU-rename pattern flagged after June. SKU audit for both still pending.
+⚠️ Ryan's 32 title-match rows are still outstanding — same suspected Shopify SKU-rename pattern. Gavin's is now resolved (see below).
 
 | Supplier | Active | Latest verified | Status | Title hints | Excludes |
 |---|---|---|---|---|---|
@@ -162,7 +162,7 @@ Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Bar
    - Re-run with the cursor rolled back → expect `ALREADY_SHARED`, no duplicate permission.
    - Only then restore the real folder ID and activate the workflow.
 
-**2. SKU audit for Ryan + Gavin.** Jul 2026 had 32 and 40 title-match rows respectively — carried over unresolved from June. Likely bulk Shopify SKU renames leaving dead refs in their Amount References (same failure mode as the Bryan sling SKUs, which were silently dropping 6 sales/month until audited).
+**2. SKU audit for Ryan.** 32 title-match rows in Jul 2026, unresolved since June. **Now known to be a payout-accuracy issue, not cosmetic** — the Gavin rebuild proved title-match rows overstate supplier takehome by omitting the fee (Gavin was over by $272.59 in one month). Ryan's Amount Reference likely has dead refs from bulk Shopify SKU renames — same failure mode as the Bryan sling SKUs. Gavin's equivalent was resolved 2026-08-06.
 
 **3. Sept 1, 2026 02:00 SGT cron** — first scheduled run on 2.33.3. Verify 8 child executions, 8 `Aug 2026 <Supplier> n8n` tabs, 8 run log entries, no 429s.
 
@@ -235,6 +235,14 @@ n8n CLI `execute` cannot share port 5679 with the running container, so:
 Note: workflow only appends. Re-runs do **not** delete previously matched rows that are now excluded — manual deletion required for those.
 
 ## Resolved (was carryover)
+
+- ✅ **Gavin Jul 2026 rebuild after 12 new SKUs (2026-08-06)** — Gavin added the `Gdart-*` (ribbed/plain × 200/1000), `gfz-mega-mag-*` (full/half × 7/10, hardware-only) and `MegaSMC-3dparts-*` families to his Amount Reference (26 → 38 SKUs). Rebuilt Jul 2026: **158 → 159 rows, TITLE MATCH 40 → 5**, exactly matching the pre-flight prediction (35 resolvable, 5 genuinely custom).
+  - **Financial correction — this was not cosmetic.** Title-match rows assume the supplier keeps the full sale price (no known fee), so they were *overstating* Gavin's takehome. With real reference prices the fee is applied: **payout $10,484.31 → $10,211.72 (−$272.59)**. Per-unit examples: `Gdart-ribbed-1000` $70.00 → $59.50, `gfz-mega-mag-full-7` $15.00 → $2.25, `gfz-mega-mag-half-10` $16.24 → $13.50.
+  - **Takeaway:** a high TITLE MATCH count is a *payout accuracy* problem, not just a cosmetic flag. Ryan's 32 rows carry the same risk and remain unaudited.
+  - Remaining 5 title matches are legitimately one-off, no reference expected: `Custom GFZ 235fps Upgrade Spring` (5613), `SBL2 spare orings kit` (5737), `d2-SBL2-yuuka-digital` (5719), `gfz gdart 5box presale` (5784), `GFZ Neo orange display unit` (5778).
+  - **Walkin cross-check passed** (per the standing rule): source `Jul 2026` tab has 16 manual/Walkin rows, dest has 16. Pre-rebuild backup at `/tmp/gavin_jul2026_backup.{json,csv}` on the NAS. Verified beforehand that `Payment Complete` / `Date of Payment` were both empty, so no human-entered data was at risk.
+  - Executed with **zero downtime** via `n8n-run.sh` — first real use of the new helper.
+- 🐛 **Fixed `n8n-run.sh` word-splitting bug (2026-08-06)** — the original `OVERRIDE="..."` env-var approach split on spaces, so `OVERRIDE_MONTH_NAME=Jul 2026` sent `2026` to docker as a container name (`Error response from daemon: No such container: 2026`). Rewritten to pass extra flags through as argv (`"$@"`), which preserves quoting. New form: `n8n-run.sh v5ParentMulti1 -e "OVERRIDE_MONTH_NAME=Jul 2026" ...`.
 
 - ✅ **n8n upgraded 2.27.5 → 2.33.3** on 2026-08-05 (27 days before the Sept 1 cron — deliberate wide validation window). 16 DB migrations applied cleanly. All 10 workflows re-activated. Env vars survived the recreate (`NODE_FUNCTION_ALLOW_*`, `N8N_RUNNERS_TASK_RUNNER_NODE_FUNCTION_ALLOW_*`, SA mount at `/files/sa.json`, TZ `Asia/Taipei`). Smoke test: `v6Tshirt1` executed `status: success` — confirms JS Task Runner still loads `fs`/`crypto`/`https`/`luxon`; 9 rows written to `Tshirt Pre-orders`. Rollback image tagged `n8nio/n8n:rollback-2.27.5` (`sha256:07eb74b4...`). Backups: `database.sqlite{,-wal,-shm}.pre-2.33.3-2026-08-05.bak` + `docker-compose.yml.pre-2.33.bak`.
   - **New in 2.33.3:** Python task runner attempts internal-mode start and fails (`Python 3 is missing`) — benign, we only use the JS runner, which registers fine.

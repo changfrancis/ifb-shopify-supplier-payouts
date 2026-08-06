@@ -89,12 +89,29 @@ Use the helper on the NAS — **no container restart, no downtime**:
 /volume1/docker/n8n/n8n-run.sh                  # no args -> usage + workflow list
 /volume1/docker/n8n/n8n-run.sh v6Tshirt1        # execute by ID
 
-# supplier re-run with a month override:
-OVERRIDE="-e OVERRIDE_MONTH_NAME=Apr 2026 -e OVERRIDE_MONTH_NAME_YY=Apr 26" \
-  /volume1/docker/n8n/n8n-run.sh v5ParentMulti1
+# Supplier re-run with a month override. Extra args pass through to docker exec;
+# quote any value containing a space.
+/volume1/docker/n8n/n8n-run.sh v5ParentMulti1 \
+  -e "OVERRIDE_MONTH_NAME=Jul 2026" \
+  -e "OVERRIDE_MONTH_NAME_YY=Jul 26" \
+  -e OVERRIDE_MONTH_START_ISO=2026-07-01T00:00:00.000+08:00 \
+  -e OVERRIDE_MONTH_END_ISO=2026-07-31T23:59:59.999+08:00
 ```
 
 The non-obvious bit it handles: `n8n execute` boots a full instance and collides on the **Task Broker port 5679** — *not* 5678. The helper remaps both ports so the one-shot run coexists with production. This supersedes the old stop-container → `docker run --rm` → restart procedure.
+
+Quote each `-e` value that contains a space. An earlier version took the overrides through a single `OVERRIDE="..."` variable, which word-split `Jul 2026` and made docker read `2026` as a container name.
+
+### Rebuilding a past month after a supplier updates their Amount Reference
+
+The workflow only **appends** — it never rewrites existing rows. To pick up new SKUs or corrected prices for a month that already ran:
+
+1. **Back up the dest tab** and confirm `Payment Complete` / `Date of Payment` are empty (a rebuild discards anything hand-entered there). `Gdrive access` and Fedex `Remarks` on Walkin rows are safe — they re-import from the supplier's Walkin source tab.
+2. Set the target supplier `active=TRUE` in the Registry and everyone else `FALSE`.
+3. **Delete the dest tab** so the workflow recreates it from scratch.
+4. Run `n8n-run.sh v5ParentMulti1` with the four `OVERRIDE_MONTH_*` args for that month.
+5. **Restore all suppliers to `active=TRUE`.**
+6. Verify, and **cross-check manual/Walkin rows**: if the dest has fewer non-numeric-OrderNo rows than the source month tab, something silently mismatched (tab name, date format, `walkin_format`).
 
 `.env` on NAS holds: `SHOPIFY_SHOP`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `N8N_BASIC_AUTH_PASSWORD`.
 
