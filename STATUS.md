@@ -197,6 +197,70 @@ VACUUM won't help — only 17 MB (1.3%) is reclaimable. Fix would be `EXECUTIONS
 
 **Failed executions (both outside the supplier pipeline):** `IfbFeedbackFwd1` 2026-08-04 15:00, `IfbOrdersToSheet1` 2026-07-29 01:00. The Shopify Error Handler fired 33 times, all triggered by IFB Brain workflows.
 
+## 🐛 Timezone off-by-one in dates — FIXED 2026-08-07, historical data NOT yet corrected
+
+**Found because Gavin asked why generated dates differed from his own monthly tab.**
+
+### Root cause
+
+`fmtDate()` used `d.getDate()` / `d.getMonth()` / `d.getFullYear()`, which read the **process** timezone. The n8n **JS Task Runner runs as a separate process (PID 19) that does NOT inherit `TZ`** from the container — it only gets `GENERIC_TIMEZONE`, which Node ignores. So Code nodes evaluated as **UTC** while the main n8n process (PID 7) correctly had `TZ=Asia/Taipei`.
+
+Every timestamp between **00:00 and 07:59 SGT** therefore rendered **one day early**. Proven directly:
+
+```
+TZ=Asia/Taipei  ->  5 May 2026   (correct)
+TZ unset (UTC)  ->  4 May 2026   (what the runner produced)
+```
+
+n8n exposes **no** config to pass `TZ` through to the internal runner (checked the full `N8N_RUNNERS_*` list — no env allowlist exists), so the fix had to be in the workflow code.
+
+### Blast radius (measured against Shopify `created_at` as ground truth)
+
+**277 Shopify-order rows across 4 months × 8 suppliers had the wrong date.**
+
+| Month | Stan | Piggy | Bluebird | Ryan | Bryan | Dylan | Gavin | Vitae |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Apr 2026 | 1 | 0 | 1 | 6 | 0 | 4 | 13 | 0 |
+| May 2026 | 0 | 0 | 1 | 13 | 1 | 5 | 13 | 0 |
+| Jun 2026 | 0 | 1 | 3 | **118** | 5 | 1 | 9 | 0 |
+| Jul 2026 | 0 | 6 | 0 | 29 | 1 | 2 | **44** | 0 |
+
+Plus all **Walkin/manual** rows (they go through `parseDate()` → SGT midnight → `fmtDate()`, the worst case). Gavin May = 18 rows, Jun = 30 rows, all −1 day.
+
+⚠️ **This predates the 2.22.5 upgrade** — April is affected too, so the runner has been UTC since the beginning, not since the upgrade.
+
+⚠️ **Month-boundary crossings are the real damage.** Order 5539 was placed **1 Jul 2026 07:30 SGT** but renders as **`30 Jun 2026`** inside the *July* tab. A year boundary would be worse: `1 Jan 03:00 SGT` → `31 Dec 2026`.
+
+Run Log timestamps were affected identically — the 1 Aug **02:00 SGT** cron was logged as `2026-07-31 18:00` (UTC).
+
+### The fix (shipped to v5 child + v6 tshirt together, per the knowledge-transfer rule)
+
+Replaced process-local getters with an explicit SGT conversion. SGT is UTC+8 year-round with no DST, so shifting the instant and reading UTC parts is exact and dependency-free — and **identical in both files** so they cannot drift:
+
+```js
+function fmtDate(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  const sgt = new Date(d.getTime() + 8 * 3600 * 1000);
+  return sgt.getUTCDate() + ' ' + MON[sgt.getUTCMonth()] + ' ' + sgt.getUTCFullYear();
+}
+```
+
+Same treatment for the Run Log timestamp. `parseDate()` was already correct (it passes `zone: 'Asia/Singapore'` to Luxon explicitly) and is unchanged.
+
+**Validation:** 6 boundary cases (00:36, 07:30, midnight, afternoon, year-rollover) — old code fails **5/6** under UTC, new code passes **6/6**; both pass under Taipei, so no regression. Live smoke test after deploy: `v6Tshirt1` → **0/8 wrong**, including order 5311 created 00:49 SGT which previously rendered a day early.
+
+**Deploy gotcha:** `n8n import:workflow` reads `"active": false` from the JSON and **deactivates** the workflow. The child was silently deactivated on import — reactivated via `n8n update:workflow --id=v5ChildPerSup1 --active=true` **plus a container restart** (the CLI warns changes don't apply while n8n is running). Verified all 8 workflows active afterwards. **Always re-check active state after importing over a live workflow.**
+
+### ⚠️ Still outstanding — historical data not corrected
+
+The fix only affects **future** runs. The 277 wrong dates in the Apr–Jul 2026 tabs are still there. Sept 1's cron will produce a correct Aug 2026 but will not touch history. Remediation options:
+
+1. **Rebuild Apr–Jul for all 8 suppliers** (~30 tabs) — most correct, but heavy churn; each needs the delete-and-rebuild dance and a manual-column safety check first.
+2. **Rebuild only the months still unpaid** — least churn; paid months stay as historical record.
+3. **Leave history, fix going forward** — dates stay wrong in past tabs.
+
+Financially the amounts are unaffected (only the displayed date shifts), but month-boundary rows can appear under the wrong month, which matters for reconciliation.
+
 ## Open carryover items
 
 - **Workflow bug (low pri):** `NO SALE THIS MONTH` placeholder is appended on idempotent re-runs that produce 0 net-new rows, even when the destination tab already has real data. Fix: gate the placeholder on `existingDataRows == 0`, not `matchedThisRun == 0`. Workaround: delete the trailing placeholder row manually after re-runs.
