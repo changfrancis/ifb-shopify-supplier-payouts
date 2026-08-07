@@ -164,7 +164,7 @@ Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Bar
 
 **2. SKU audit for Ryan.** 32 title-match rows in Jul 2026, unresolved since June. **Now known to be a payout-accuracy issue, not cosmetic** — the Gavin rebuild proved title-match rows overstate supplier takehome by omitting the fee (Gavin was over by $272.59 in one month). Ryan's Amount Reference likely has dead refs from bulk Shopify SKU renames — same failure mode as the Bryan sling SKUs. Gavin's equivalent was resolved 2026-08-06.
 
-**3. Sept 1, 2026 02:00 SGT cron** — first scheduled run on 2.33.3. Verify 8 child executions, 8 `Aug 2026 <Supplier> n8n` tabs, 8 run log entries, no 429s.
+**3. Sept 1, 2026 02:00 SGT cron** — first scheduled run on 2.33.3 **and the first month with correct dates**. Verify 8 child executions, 8 `Aug 2026 <Supplier> n8n` tabs, 8 run log entries, no 429s. Additionally spot-check an order created between 00:00–07:59 SGT and confirm its Date matches the true SGT date, plus that the Run Log timestamp now reads ~`02:0x` and not `18:0x`. Do **not** rebuild Apr–Jul to match — leaving those was a deliberate decision.
 
 **4. Optional — DB bloat.** `IfbOrdersToSheet1` holds 946 MB of the 1.09 GB execution data. Not urgent (disk is at 3%), and it's an IFB Brain workflow rather than this repo's, but it shares the n8n instance. Fix would be `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` scoped to that workflow, or trimming its payload.
 
@@ -251,15 +251,17 @@ Same treatment for the Run Log timestamp. `parseDate()` was already correct (it 
 
 **Deploy gotcha:** `n8n import:workflow` reads `"active": false` from the JSON and **deactivates** the workflow. The child was silently deactivated on import — reactivated via `n8n update:workflow --id=v5ChildPerSup1 --active=true` **plus a container restart** (the CLI warns changes don't apply while n8n is running). Verified all 8 workflows active afterwards. **Always re-check active state after importing over a live workflow.**
 
-### ⚠️ Still outstanding — historical data not corrected
+### Historical data — DECISION: left uncorrected (user call, 2026-08-07)
 
-The fix only affects **future** runs. The 277 wrong dates in the Apr–Jul 2026 tabs are still there. Sept 1's cron will produce a correct Aug 2026 but will not touch history. Remediation options:
+The fix only affects **future** runs. **Apr–Jul 2026 tabs keep their wrong dates by decision** — they stand as the historical record of what was actually generated and paid. Rebuilding was considered and declined; no action pending.
 
-1. **Rebuild Apr–Jul for all 8 suppliers** (~30 tabs) — most correct, but heavy churn; each needs the delete-and-rebuild dance and a manual-column safety check first.
-2. **Rebuild only the months still unpaid** — least churn; paid months stay as historical record.
-3. **Leave history, fix going forward** — dates stay wrong in past tabs.
+Consequences to keep in mind when reading those tabs:
 
-Financially the amounts are unaffected (only the displayed date shifts), but month-boundary rows can appear under the wrong month, which matters for reconciliation.
+- Amounts are **unaffected** — only the displayed date shifts, so payouts already made were correct.
+- **277 Shopify rows** in Apr–Jul 2026 show a date one day earlier than the true SGT order date (every order placed 00:00–07:59 SGT). Gavin's Walkin/manual rows likewise: May 18, Jun 30.
+- **Month-boundary rows read as the wrong month.** Order 5539 sits in the *Jul 2026 Gavin n8n* tab showing `30 Jun 2026`. If a supplier queries a date against their own records, this is the likely reason — their sheet is right, ours is a day early.
+- **Aug 2026 onward is correct** (Sept 1 cron is the first clean month). A step change in date accuracy occurs at the Jul/Aug boundary — do not treat it as a data anomaly.
+- Run Log timestamps before 2026-08-07 are **UTC**, not SGT (subtract 8h to read them as the cron's actual SGT firing time — e.g. the 1 Aug 02:00 SGT run is logged `2026-07-31 18:00`).
 
 ## Open carryover items
 
