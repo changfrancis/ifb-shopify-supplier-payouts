@@ -302,6 +302,29 @@ Note: workflow only appends. Re-runs do **not** delete previously matched rows t
 
 ## Resolved (was carryover)
 
+- ✅ **Full stack update (2026-08-07)** — n8n plus every stale container image on the NAS, all 15 containers healthy afterwards, zero unhealthy/restarting.
+  - **n8n 2.33.3 → 2.33.7.** Chosen over 2.34.4 deliberately: both carry the *same* core fixes, but 2.33.7 is patch-level on a line already validated, whereas 2.34.4 was a minor bump released hours earlier with no soak. The relevant fixes are all task-runner ones, which matter because the whole pipeline runs Code nodes there — *task broker resilience when a runner dies* (2.33.4), *recover unresponsive task runners* (2.33.4), *fix task runner health check failing* (2.33.7). A hung runner during the Sept 1 cron would mean a missed payout run. 0 migrations, 8 workflows active, zero deprecations, `v6Tshirt1` smoke test success.
+  - **⚠️ n8n image is now PINNED to `n8nio/n8n:2.33.7`, no longer `:latest`.** Required, because `:latest` had already moved to 2.34.4 and a plain `compose up -d` would have silently jumped a minor version. Keep pinning — bump the tag deliberately on future upgrades. Backup: `docker-compose.yml.pre-2.33.7.bak`.
+  - **No security fixes in any release** — an initial grep appeared to flag `rce` in all five, but those were substring hits on *"resource"* / *"force"*. Reading the actual notes showed bug fixes only.
+
+  | Container | Before | After |
+  |---|---|---|
+  | n8n | 2.33.3 | **2.33.7** (pinned) |
+  | dolibarr-db | MariaDB 10.11.16 | **10.11.18** |
+  | 3dps-db | PostgreSQL 15.18 | 15.18 (Alpine base refresh — OS-level patches only) |
+  | dolibarr-app | image 2026-04-04 | 2026-08-08 |
+  | tailscale | 2026-05-01 | 2026-07-31 |
+  | cloudflared ×2 | 2026-06-09 | 2026-07-23 |
+  | nginx:alpine | 2026-05-22 | 2026-07-15 |
+  | clamav | 2026-06-22 | 2026-08-10 |
+  | autoheal | 2026-06-13 | 2026-08-11 |
+
+  - **Safety taken first:** `pg_dumpall` (15 MB, 62 453 lines, completion marker verified) and `mysqldump --all-databases --single-transaction` (19 MB, 182 183 lines, clean trailer) *before* touching either DB; all 5 compose files and the n8n SQLite copied to `/volume1/docker/_preupdate_2026-08-07/`; every public image tagged `:rollback-20260807` (n8n as `:rollback-2.33.3`) so any container can be reverted by flipping one tag.
+  - **Data verified intact after:** Postgres 25 tables / 47 MB unchanged; MariaDB 372 tables / 2 users unchanged; dolibarr HTTP 200; n8n healthz 200.
+  - **Note for other projects:** recreating `3dps-nginx` also restarted `3dps-api` via compose's `depends_on` chain — expected, came back healthy and serving traffic. The mariadb root password env var is `MYSQL_ROOT_PASSWORD`, *not* `MARIADB_ROOT_PASSWORD` (the first dump attempt failed on this).
+  - **Deferred by decision:** ~35 GB of reclaimable Docker garbage (245 dangling images + 19 GB build cache) left alone — disk is at 3 % of 7 TB, and pruning the build cache would slow 3dps's next image build.
+  - **DSM 7.3.2** (build 86009, 2026-06-18) — update status unverified; `synoupgrade` needs an interactive sudo password. Check in the DSM UI.
+
 - ✅ **Gavin Jul 2026 rebuild after 12 new SKUs (2026-08-06)** — Gavin added the `Gdart-*` (ribbed/plain × 200/1000), `gfz-mega-mag-*` (full/half × 7/10, hardware-only) and `MegaSMC-3dparts-*` families to his Amount Reference (26 → 38 SKUs). Rebuilt Jul 2026: **158 → 159 rows, TITLE MATCH 40 → 5**, exactly matching the pre-flight prediction (35 resolvable, 5 genuinely custom).
   - **Financial correction — this was not cosmetic.** Title-match rows assume the supplier keeps the full sale price (no known fee), so they were *overstating* Gavin's takehome. With real reference prices the fee is applied: **payout $10,484.31 → $10,211.72 (−$272.59)**. Per-unit examples: `Gdart-ribbed-1000` $70.00 → $59.50, `gfz-mega-mag-full-7` $15.00 → $2.25, `gfz-mega-mag-half-10` $16.24 → $13.50.
   - **Takeaway:** a high TITLE MATCH count is a *payout accuracy* problem, not just a cosmetic flag. Ryan's 32 rows carry the same risk and remain unaudited.

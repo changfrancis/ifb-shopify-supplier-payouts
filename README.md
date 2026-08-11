@@ -71,7 +71,10 @@ v4 and v5 share one canonical pipeline; only data sources differ. **Any fix to m
 
 ## Deployment
 
-Container: `n8nio/n8n:latest` on Synology DSM Docker (currently **n8n 2.33.3**, upgraded 2026-08-05). Compose file (NAS-only, not in repo) sets:
+Container: **`n8nio/n8n:2.33.7`** on Synology DSM Docker (upgraded 2026-08-07). Compose file (NAS-only, not in repo) sets:
+
+> **The image tag is pinned deliberately — do not revert it to `:latest`.** `:latest` drifts across minor versions (it had already moved to 2.34.4), so a routine `compose up -d` would silently jump versions. Bump the pinned tag as an explicit decision, and smoke-test afterwards.
+
 
 - `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`
 - `NODE_FUNCTION_ALLOW_BUILTIN=fs,crypto,https,http,path,buffer`
