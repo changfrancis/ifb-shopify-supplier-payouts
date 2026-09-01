@@ -2,7 +2,7 @@
 
 Self-hosted [n8n](https://n8n.io) automation that pulls monthly Shopify orders from `idealfoamblaster.myshopify.com`, matches them against per-supplier price references in Google Sheets, and writes a per-supplier monthly payout sheet — used to pay each supplier at the start of every month.
 
-Runs on a Synology NAS in Docker (`n8nio/n8n:latest`).
+Runs on a Synology NAS in Docker, pinned to `n8nio/n8n:2.36.9` (see Deployment — the tag is pinned on purpose, not `:latest`).
 
 ## Architecture
 
@@ -71,7 +71,7 @@ v4 and v5 share one canonical pipeline; only data sources differ. **Any fix to m
 
 ## Deployment
 
-Container: **`n8nio/n8n:2.33.7`** on Synology DSM Docker (upgraded 2026-08-07). Compose file (NAS-only, not in repo) sets:
+Container: **`n8nio/n8n:2.36.9`** on Synology DSM Docker (upgraded 2026-09-02). Compose file (NAS-only, not in repo) sets:
 
 > **The image tag is pinned deliberately — do not revert it to `:latest`.** `:latest` drifts across minor versions (it had already moved to 2.34.4), so a routine `compose up -d` would silently jump versions. Bump the pinned tag as an explicit decision, and smoke-test afterwards.
 

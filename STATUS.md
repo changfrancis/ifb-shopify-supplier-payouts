@@ -1,4 +1,4 @@
-# Status — Sept 1 2026 cron FAILED on a transient Sheets 503, recovered manually; retry hardening added
+# Status — n8n 2.36.9, retry-hardened; Sept 1 cron failed on a Sheets 503 and was recovered manually
 
 ## Production state
 
@@ -73,7 +73,7 @@ Manual Jun 2026 run done 2026-06-29 ahead of the July 1 cron, then two targeted 
 ## Workflows in n8n
 
 ```
-n8n list:workflow   (as of 2026-09-01, n8n 2.33.7)
+n8n list:workflow   (as of 2026-09-02, n8n 2.36.9)
   ShopifyErrHandle1     Shopify Sync — Error Handler            ACTIVE
   v5ChildPerSup1        Shopify Per-Supplier Sync v1 (child)    ACTIVE
   v5ParentMulti1        Shopify Multi-Supplier Sync v1 (parent) ACTIVE    ← cron 0 2 1 * * SGT
@@ -359,6 +359,23 @@ n8n CLI `execute` cannot share port 5679 with the running container, so:
 Note: workflow only appends. Re-runs do **not** delete previously matched rows that are now excluded — manual deletion required for those.
 
 ## Resolved (was carryover)
+
+- ✅ **Stack update round 2 (2026-09-02)** — n8n off the EOL 2.33.x line, plus every container image refreshed again. All 15 containers healthy, zero errors after settle.
+  - **n8n 2.33.7 → 2.36.9** (3 minor versions). **2.33.x had gone EOL** — no further patches — which is what forced the jump rather than another patch-level hop. The fix that mattered: **2.35.5 "Avoid restarting task runners that are only slow"** — directly relevant because the parent runs ~348s and the child ~151s, so a runner killed for slowness is exactly how a monthly cron would die. **13 migrations** applied cleanly.
+  - **Image pin moved to `n8nio/n8n:2.36.9`** — keep pinning; bump deliberately. Backup: `docker-compose.yml.pre-2.36.9.bak`.
+  - **✅ Upgrading does NOT deactivate workflows** — unlike `import:workflow`, a `compose up -d` version bump preserved all 8 active. Verified retry config survived all 13 migrations (parent registry 5×3000ms, token 3×2000ms, all 7 child Sheets nodes 3×2000ms) and re-ran the `v6Tshirt1` smoke test to confirm Code nodes still load `fs`/`crypto`/`https`/`luxon`.
+
+  | Container | Before | After |
+  |---|---|---|
+  | n8n | 2.33.7 | **2.36.9** (pinned) |
+  | 3dps-db | PostgreSQL 15.18 | **15.19** |
+  | dolibarr-db | MariaDB 10.11.18 | **10.11.19** |
+  | dolibarr-app, nginx, clamav, autoheal, cloudflared ×2 | stale | current |
+  | tailscale | 1.102.3 | unchanged — registry `last_updated` moved but the amd64 digest did not |
+
+  - Same safety procedure: `pg_dumpall` (15 MB, marker verified) + `mysqldump --single-transaction` (20 MB, trailer verified) + n8n SQLite + all 5 compose files into `/volume1/docker/_preupdate_2026-09-02/`, and 9 `:rollback-20260902` image tags. Data verified after: Postgres 25 tables / 48 MB, MariaDB 372 tables / 2 users, dolibarr HTTP 200, n8n healthz + UI HTTP 200, both Cloudflare tunnels 12 connections each.
+  - **Benign noise not to chase:** cloudflared logs `failed to sufficiently increase receive buffer size` on every start (standard quic-go notice on Linux UDP defaults), and 3dps-tunnel briefly logs `Unable to reach the origin service ... lookup nginx` during the restart window before nginx finishes coming up. Both clear on their own — 0 errors across all services 2 minutes after settle.
+- ✅ **DSM upgraded 7.3.2 → 7.4.1** (build 90080) by the user, ~2026-08-27. This closes the one layer I could not reach (`synoupgrade` needs an interactive sudo password). Explains the ~6-day uptime; checked for fallout and found **no execution gaps** — nothing was dropped by the reboot.
 
 - ✅ **Full stack update (2026-08-07)** — n8n plus every stale container image on the NAS, all 15 containers healthy afterwards, zero unhealthy/restarting.
   - **n8n 2.33.3 → 2.33.7.** Chosen over 2.34.4 deliberately: both carry the *same* core fixes, but 2.33.7 is patch-level on a line already validated, whereas 2.34.4 was a minor bump released hours earlier with no soak. The relevant fixes are all task-runner ones, which matter because the whole pipeline runs Code nodes there — *task broker resilience when a runner dies* (2.33.4), *recover unresponsive task runners* (2.33.4), *fix task runner health check failing* (2.33.7). A hung runner during the Sept 1 cron would mean a missed payout run. 0 migrations, 8 workflows active, zero deprecations, `v6Tshirt1` smoke test success.
