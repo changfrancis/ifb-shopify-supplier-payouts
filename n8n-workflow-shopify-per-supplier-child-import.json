@@ -4,12 +4,23 @@
   "nodes": [
     {
       "parameters": {
-        "events": ["workflow_called_by_another_workflow"],
+        "events": [
+          "workflow_called_by_another_workflow"
+        ],
         "workflowInputs": {
           "values": [
-            {"name": "supplier", "type": "object"},
-            {"name": "orders", "type": "array"},
-            {"name": "params", "type": "object"}
+            {
+              "name": "supplier",
+              "type": "object"
+            },
+            {
+              "name": "orders",
+              "type": "array"
+            },
+            {
+              "name": "params",
+              "type": "object"
+            }
           ]
         }
       },
@@ -17,7 +28,10 @@
       "name": "Workflow Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -28,50 +42,99 @@
       "name": "Pace API (15s)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [350, 300]
+      "position": [
+        350,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "read",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.amount_ref_sheet_id }}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.amount_ref_tab_name }}", "mode": "name"},
-        "options": {"returnFirstMatch": false}
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.amount_ref_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.amount_ref_tab_name }}",
+          "mode": "name"
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
       },
       "id": "v5c-read-amt",
       "name": "Read Amount Reference",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [460, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
       "executeOnce": true,
       "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
         "operation": "read",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.walkin_sheet_id }}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.walkin_tab_name }}", "mode": "name"},
-        "options": {"returnFirstMatch": false}
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.walkin_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.walkin_tab_name }}",
+          "mode": "name"
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
       },
       "id": "v5c-read-walkin",
       "name": "Read Walkin Source",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [680, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
       "executeOnce": true,
       "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
         "resource": "sheet",
         "operation": "create",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}", "mode": "id"},
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}",
+          "mode": "id"
+        },
         "title": "={{ $('Workflow Trigger').first().json.supplier.dest_tab_name }}",
         "options": {}
       },
@@ -79,18 +142,33 @@
       "name": "Create Month Tab",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [900, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
       "executeOnce": true,
       "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
         "resource": "sheet",
         "operation": "create",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}", "mode": "id"},
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}",
+          "mode": "id"
+        },
         "title": "={{ $('Workflow Trigger').first().json.supplier.run_log_tab }}",
         "options": {}
       },
@@ -98,29 +176,61 @@
       "name": "Create Run Log Tab",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [1120, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
       "executeOnce": true,
       "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
         "operation": "read",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.dest_tab_name }}", "mode": "name"},
-        "options": {"returnFirstMatch": false}
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.dest_tab_name }}",
+          "mode": "name"
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
       },
       "id": "v5c-read-dest",
       "name": "Read Existing Destination Rows",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [1340, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
       "executeOnce": true,
       "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -131,15 +241,26 @@
       "name": "Match SKUs & Build Rows",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 300],
+      "position": [
+        1560,
+        300
+      ],
       "alwaysOutputData": true
     },
     {
       "parameters": {
         "operation": "append",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.dest_tab_name }}", "mode": "name"},
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.dest_tab_name }}",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "autoMapInputData",
           "value": {},
@@ -154,10 +275,21 @@
       "name": "Append Rows to Month Tab",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [1780, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
+      "position": [
+        1780,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
       "onError": "continueRegularOutput",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -168,7 +300,10 @@
       "name": "Apply Format + Tab Front",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2000, 300],
+      "position": [
+        2000,
+        300
+      ],
       "alwaysOutputData": true,
       "onError": "continueRegularOutput"
     },
@@ -181,14 +316,25 @@
       "name": "Build Run Log Entry",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2220, 300]
+      "position": [
+        2220,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "append",
         "authentication": "serviceAccount",
-        "documentId": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{ $('Workflow Trigger').first().json.supplier.run_log_tab }}", "mode": "name"},
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.params.INTERNAL_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Trigger').first().json.supplier.run_log_tab }}",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "autoMapInputData",
           "value": {},
@@ -203,25 +349,149 @@
       "name": "Append to Run Log Tab",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [2440, 300],
-      "credentials": {"googleApi": {"id": "KeoYtiXJlq9lWsyF", "name": "Google Service Account account"}},
-      "onError": "continueRegularOutput"
+      "position": [
+        2440,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "KeoYtiXJlq9lWsyF",
+          "name": "Google Service Account account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     }
   ],
   "connections": {
-    "Workflow Trigger":              { "main": [[ { "node": "Pace API (15s)",                "type": "main", "index": 0 } ]] },
-    "Pace API (15s)":                 { "main": [[ { "node": "Read Amount Reference",        "type": "main", "index": 0 } ]] },
-    "Read Amount Reference":         { "main": [[ { "node": "Read Walkin Source",           "type": "main", "index": 0 } ]] },
-    "Read Walkin Source":            { "main": [[ { "node": "Create Month Tab",             "type": "main", "index": 0 } ]] },
-    "Create Month Tab":              { "main": [[ { "node": "Create Run Log Tab",           "type": "main", "index": 0 } ]] },
-    "Create Run Log Tab":            { "main": [[ { "node": "Read Existing Destination Rows","type": "main", "index": 0 } ]] },
-    "Read Existing Destination Rows":{ "main": [[ { "node": "Match SKUs & Build Rows",      "type": "main", "index": 0 } ]] },
-    "Match SKUs & Build Rows":       { "main": [[ { "node": "Append Rows to Month Tab",     "type": "main", "index": 0 } ]] },
-    "Append Rows to Month Tab":      { "main": [[ { "node": "Apply Format + Tab Front",     "type": "main", "index": 0 } ]] },
-    "Apply Format + Tab Front":      { "main": [[ { "node": "Build Run Log Entry",          "type": "main", "index": 0 } ]] },
-    "Build Run Log Entry":           { "main": [[ { "node": "Append to Run Log Tab",        "type": "main", "index": 0 } ]] }
+    "Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Pace API (15s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pace API (15s)": {
+      "main": [
+        [
+          {
+            "node": "Read Amount Reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Amount Reference": {
+      "main": [
+        [
+          {
+            "node": "Read Walkin Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Walkin Source": {
+      "main": [
+        [
+          {
+            "node": "Create Month Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Month Tab": {
+      "main": [
+        [
+          {
+            "node": "Create Run Log Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Run Log Tab": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Destination Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Destination Rows": {
+      "main": [
+        [
+          {
+            "node": "Match SKUs & Build Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match SKUs & Build Rows": {
+      "main": [
+        [
+          {
+            "node": "Append Rows to Month Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Rows to Month Tab": {
+      "main": [
+        [
+          {
+            "node": "Apply Format + Tab Front",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Format + Tab Front": {
+      "main": [
+        [
+          {
+            "node": "Build Run Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Run Log Entry": {
+      "main": [
+        [
+          {
+            "node": "Append to Run Log Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
-  "settings": {"executionOrder": "v1", "errorWorkflow": "ShopifyErrHandle1"},
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "ShopifyErrHandle1"
+  },
   "tags": []
 }

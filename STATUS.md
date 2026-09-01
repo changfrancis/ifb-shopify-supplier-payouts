@@ -1,10 +1,10 @@
-# Status — production live, Aug 1 2026 cron clean; n8n upgraded to 2.33.3
+# Status — Sept 1 2026 cron FAILED on a transient Sheets 503, recovered manually; retry hardening added
 
 ## Production state
 
 Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v4 retired.
 
-**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-08-01 02:00 SGT** — clean run on 2.27.5, 9/9 executions success (1 parent + 8 children), all 8 `Jul 2026 <Supplier> n8n` tabs + run logs written in 5m47s (02:00:00 → 02:05:47). **Next firing: September 1, 2026 02:00 SGT** (first scheduled cron on 2.33.3).
+**Cron:** `0 2 1 * *` Asia/Taipei (= SGT, GMT+8). **Last fired: 2026-09-01 02:00 SGT — FAILED** on a transient Google Sheets 503 at `Read Suppliers Registry`; zero suppliers dispatched. Recovered by manual re-run the same day (282 rows, Aug 2026). Retry hardening has since been added to every Sheets node — see the failure write-up below. **Next firing: October 1, 2026 02:00 SGT** (first run with retry protection; also the second month on the TZ-safe date code).
 
 ### Jul 2026 cron output (2026-08-01 02:00 SGT)
 
@@ -73,7 +73,7 @@ Manual Jun 2026 run done 2026-06-29 ahead of the July 1 cron, then two targeted 
 ## Workflows in n8n
 
 ```
-n8n list:workflow   (as of 2026-08-05, n8n 2.33.3)
+n8n list:workflow   (as of 2026-09-01, n8n 2.33.7)
   ShopifyErrHandle1     Shopify Sync — Error Handler            ACTIVE
   v5ChildPerSup1        Shopify Per-Supplier Sync v1 (child)    ACTIVE
   v5ParentMulti1        Shopify Multi-Supplier Sync v1 (parent) ACTIVE    ← cron 0 2 1 * * SGT
@@ -164,7 +164,7 @@ Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Bar
 
 **2. SKU audit for Ryan.** 32 title-match rows in Jul 2026, unresolved since June. **Now known to be a payout-accuracy issue, not cosmetic** — the Gavin rebuild proved title-match rows overstate supplier takehome by omitting the fee (Gavin was over by $272.59 in one month). Ryan's Amount Reference likely has dead refs from bulk Shopify SKU renames — same failure mode as the Bryan sling SKUs. Gavin's equivalent was resolved 2026-08-06.
 
-**3. Sept 1, 2026 02:00 SGT cron** — first scheduled run on 2.33.3 **and the first month with correct dates**. Verify 8 child executions, 8 `Aug 2026 <Supplier> n8n` tabs, 8 run log entries, no 429s. Additionally spot-check an order created between 00:00–07:59 SGT and confirm its Date matches the true SGT date, plus that the Run Log timestamp now reads ~`02:0x` and not `18:0x`. Do **not** rebuild Apr–Jul to match — leaving those was a deliberate decision.
+**3. Oct 1, 2026 02:00 SGT cron** — first run with retry protection on the Sheets nodes, and the second month on the TZ-safe date code. Verify: 1 parent + 8 child executions all `success`, 8 `Sep 2026 <Supplier> n8n` tabs, 8 Run Log entries with **SGT** timestamps (~`02:0x`, not `18:0x`), and no 429/503. If a Sheets node 503s again, the retry should absorb it — check the execution for a retried-then-succeeded node rather than a hard failure.
 
 **4. Optional — DB bloat.** `IfbOrdersToSheet1` holds 946 MB of the 1.09 GB execution data. Not urgent (disk is at 3%), and it's an IFB Brain workflow rather than this repo's, but it shares the n8n instance. Fix would be `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` scoped to that workflow, or trimming its payload.
 
@@ -262,6 +262,64 @@ Consequences to keep in mind when reading those tabs:
 - **Month-boundary rows read as the wrong month.** Order 5539 sits in the *Jul 2026 Gavin n8n* tab showing `30 Jun 2026`. If a supplier queries a date against their own records, this is the likely reason — their sheet is right, ours is a day early.
 - **Aug 2026 onward is correct** (Sept 1 cron is the first clean month). A step change in date accuracy occurs at the Jul/Aug boundary — do not treat it as a data anomaly.
 - Run Log timestamps before 2026-08-07 are **UTC**, not SGT (subtract 8h to read them as the cron's actual SGT firing time — e.g. the 1 Aug 02:00 SGT run is logged `2026-07-31 18:00`).
+
+## 🔴 Sept 1 2026 cron FAILED — recovered same day (2026-09-01)
+
+**The scheduled run produced nothing. All 8 August tabs were missing until a manual re-run.**
+
+### What happened
+
+Execution 5091, `v5ParentMulti1`, `mode=trigger`, fired 2026-08-31 18:00 UTC (= Sept 1 02:00 SGT) and errored after ~13s. It got four nodes deep:
+
+| Node | Result |
+|---|---|
+| Monthly Cron (1st @ 02:00) | ✓ |
+| Set Parameters | ✓ 50ms |
+| Get Shopify Token | ✓ 445ms |
+| Fetch All Orders (paginated) | ✓ 11 357ms |
+| **Read Suppliers Registry** | ✗ **NodeApiError: Service unavailable (503)** |
+
+A **transient Google Sheets 503** on the registry read. Because the parent could not load the registry, it never dispatched a single child — **zero suppliers processed, 8/8 August tabs missing**. The error workflow did fire correctly (exec 5092, 13s later) and sent the failure email.
+
+**Red herring:** the logs are full of `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed` around that timestamp. Unrelated — it comes from the insights-pruning subsystem ("Pruning old insights data" appears alongside) and is ongoing background noise, not the cause.
+
+### Recovery
+
+Manual re-run of `v5ParentMulti1` with the Aug 2026 override — 1 parent + 8 children, all success. **282 rows** written:
+
+| Supplier | Rows | Flags |
+|---|---:|---|
+| Stan | 1 | clean |
+| Piggy | 4 | TITLE MATCH=4 |
+| Bluebird | 1 | REFUND=1 |
+| Ryan | 124 | TITLE MATCH=23, REFUND=6 |
+| Bryan | 14 | clean |
+| Dylan | 14 | TITLE MATCH=1 |
+| Gavin | 119 | TITLE MATCH=13, REFUND=5, CANCELLED=1 |
+| Vitae | 5 | TITLE MATCH=5 |
+| **Total** | **282** | |
+
+### ✅ Timezone fix confirmed in production
+
+Aug 2026 is the first month generated with the TZ-safe `fmtDate`. Checked every Shopify row against `created_at`: **0 wrong dates out of 282**, and **23 of those orders fell in the previously-broken 00:00–07:59 SGT window**. Run Log timestamps now read SGT (`2026-09-01 12:43:22`) instead of UTC.
+
+### Root fix — retry hardening (the real gap)
+
+Not one Google Sheets node in *either* workflow had retry configured. A single transient blip could — and did — kill an entire month. Now added:
+
+| Workflow | Node | Retry |
+|---|---|---|
+| parent | Read Suppliers Registry | **5 tries / 3000ms** (single point of failure for the whole month) |
+| parent | Get Shopify Token | 3 / 2000ms |
+| child | all 7 Sheets nodes | 3 / 2000ms |
+
+The child nodes matter **more** than their `onError: continueRegularOutput` suggests: a silent 503 there does not stop the run, it produces *wrong* data — a failed `Read Amount Reference` turns every row into TITLE MATCH, a failed `Read Existing Destination Rows` breaks dedup and duplicates rows. Verified live in the n8n DB after import.
+
+`Execute Per-Supplier Sync` deliberately has **no** retry: it already uses `onError: continueRegularOutput` so one bad supplier cannot block the rest, and retrying a sub-workflow that partially completed risks double-appending rows.
+
+### ⚠️ Deploy trap (hit twice now — always check)
+
+`n8n import:workflow` reads `"active": false` from the JSON and **silently deactivates the live workflow**. Both parent and child were deactivated on import. Recovery is `n8n update:workflow --id=<ID> --active=true` **plus a container restart** — the CLI explicitly warns changes do not apply while n8n is running. Always re-verify active state after any import.
 
 ## Open carryover items
 
