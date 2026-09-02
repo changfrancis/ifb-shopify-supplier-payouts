@@ -1,4 +1,4 @@
-# Status — Aug 2026 rebuilt clean (271 rows, 0 date errors); n8n 2.36.9, retry-hardened
+# Status — hint matches now record WHY in Remarks; Aug 2026 supplier-by-supplier review started (Vitae done)
 
 ## Production state
 
@@ -140,6 +140,7 @@ Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Bar
 
 - SKU matching with `_↔-` interchangeable + `COLOUR`/`XXX` wildcards
 - Title hints checked across `title`, `variant_title`, `name`, `vendor`, `properties` (PII-filtered: skip emails/phone/address fields), `o.note`, `o.tags`
+- **NEW (2026-09-03)**: a hint match records *which field and which hint* fired, in Remarks — `TITLE MATCH [note:'linford'] vendor="SweetHeart" - add to Amount Reference?`. A match resting **only** on `note`/`tags` is labelled `TITLE MATCH WEAK`. See "Hint matches now say why" below
 - `exclude_skus` checks the same fallback used for SKU column (li.sku || li.title || li.name)
 - UNDERPRICED check gated on currency=SGD
 - **NEW**: when ref listing is empty (e.g. supplier still onboarding), use Shopify sale price as Listing + flag yellow `TITLE MATCH - ref price pending`
@@ -417,9 +418,51 @@ Genuinely absent from their supplier's reference, so takehome is the full sale p
 - **Vitae** — `vitae folding buttstock-1` $372.10 · `diana-cnc-slide-black` $140 · `storm-mag-magnet` x3 $9
 - **Dylan** — `d2-sbl1-deskmat-3060` $25 (SBL1 variant of the existing `d2-sbl2-deskmat-3060`)
 
-Vitae shows all 5 rows as TITLE MATCH, but this is **not** a read failure — each SKU was tested against the current reference and is genuinely absent. Vitae simply had only 5 rows this month.
+Vitae shows all 5 rows as TITLE MATCH, but this is **not** a read failure — each SKU was tested against the current reference and is genuinely absent. Vitae simply had only 5 rows this month. **4 of those 5 rows turned out to be false positives — see the Vitae audit below.**
 
 Pre-rebuild backups of all 8 tabs: `/tmp/aug2026_backup/` on the NAS (json + csv per supplier).
+
+### Supplier-by-supplier review — Vitae (2026-09-03)
+
+Every Aug 2026 Vitae row was replayed through the workflow's exact matcher against the live Shopify orders (`/tmp/probe_vitae.py` on the NAS).
+
+| Order | SKU | $ | Shopify vendor | Matched on |
+|---|---|---:|---|---|
+| 6037 | `storm-mag-magnet` ×3 | 9.00 | **SweetHeart** | ❌ `order.note` only |
+| 5918 | `diana-cnc-slide-black` | 140.00 | **Hare Technology** | ❌ `order.note` only |
+| 6159 | `vitae folding buttstock-1` | 372.10 | **Vitae Precision** | ✅ title + vendor |
+
+**$149.00 of Vitae's $521.10 is misattributed.** Order 6037's note reads *"To be picked up by linford of vitae precision, lord of the wood makers"* and order 5918's note is literally `Linford` — Linford is the **person collecting the order**, not the maker of the item. `order.note` sits in the same hint haystack as the product fields, so three SweetHeart magnets and a Hare Technology slide landed in his tab. Not one product field on either order mentions Vitae.
+
+This is the same vector that pulled Gavin's `sabre-tdarts-white-red` in off a note mentioning "SBL". It is a **general** flaw, not a Vitae one.
+
+Order 6159 is genuinely Linford's but absent from his 51-SKU Amount Reference, so its $372.10 is the Shopify sale price, not an agreed takehome. **Open: needs a reference price.**
+
+### Hint matches now say why (2026-09-03)
+
+**Decision (user):** *"false positive is better than missing it"* — keep matching on `order.note`, but make every hint match auditable from the sheet instead of dropping the field. Rejected the alternative (removing `note`/`tags` from the haystack) because a missing payout row is worse than a labelled spurious one.
+
+`titleHints()` in the v5 child now returns `{ weak, why }` instead of a boolean, and the Remarks cell carries the evidence:
+
+```text
+TITLE MATCH [title:'vitae','vitae precision' vendor:'vitae','vitae precision'] vendor="Vitae Precision" - add to Amount Reference?
+TITLE MATCH WEAK [note:'linford','vitae','vitae precision'] vendor="SweetHeart" - add to Amount Reference?
+TITLE MATCH WEAK [note:'linford'] vendor="Hare Technology" - add to Amount Reference?
+```
+
+- `WEAK` = matched **only** on `note`/`tags` (free-text logistics), no product field. One filter — Remarks contains `TITLE MATCH WEAK` — surfaces every row of this class across all 8 suppliers.
+- `vendor="…"` echoes Shopify's vendor field, the fastest ownership signal.
+- `name` is suppressed when it only echoes `title`/`variant` (it is those two concatenated).
+- `TITLE MATCH - ref price pending` now also names the reference row it hit: `[ref:<sku>]`.
+- Existing `countFlag('TITLE MATCH')` in the Run Log still counts both classes — the string is a prefix, so no Run Log schema change was needed.
+
+Verified before deploy: `node --check` on the whole Match node, plus a harness replaying the three real Vitae line items above and a no-hint control. Imported to `v5ChildPerSup1`, re-published, container restarted, 8/8 workflows active.
+
+**Takes effect on the next run** — the Aug 2026 tabs still show the old bare `TITLE MATCH - add to Amount Reference?` until rebuilt.
+
+**Note:** `n8n update:workflow` is now deprecated in 2.36.9 in favour of `n8n publish:workflow --id=<id>`. The old form still works and still requires the container restart.
+
+**Not applied to v4** — `v4` no longer exists in n8n (retired when Gavin folded into the Registry; `n8n list:workflow` shows 10 workflows, none of them v4). Its repo JSON has already drifted (hardcoded hints, un-fixed TZ bug) and was deliberately left alone rather than half-ported. **Open: decide whether to delete `n8n-workflow-shopify-monthly-sku-v4-import.json` or mark it retired**, since the knowledge-transfer rule can no longer be honoured for it. `v6Tshirt1` has no title-hint logic, so nothing to port there.
 
 ## Resolved (was carryover)
 

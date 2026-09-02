@@ -51,7 +51,7 @@ Each supplier is a row in a dedicated Google Sheet (`Registry` tab). Columns:
 | `walkin_format` | `standard-12` / `standard-11` / `ryan` / `vitae` | Column-mapping selector for Walkin source |
 | `walkin_date_format` | `D LLL yyyy` | Luxon format used to parse dates in Walkin tab |
 | `run_log_tab` | `Run Log Piggy` | Per-supplier run log inside the consolidated internal sheet |
-| `title_hints` | `piggy,pgf,pf` | Comma-separated lowercase substrings; products matched by title get flagged TITLE MATCH |
+| `title_hints` | `piggy,pgf,pf` | Comma-separated lowercase substrings; products matched this way get flagged TITLE MATCH, with the field + hint that fired recorded in Remarks (see below) |
 | `exclude_skus` | `freebie-x,promo-y` | Comma-separated SKU exclusions (supports `*` wildcard) |
 
 ## Output
@@ -64,6 +64,31 @@ Conditional formatting applied automatically inside the workflow (no post-run sc
 - 🟥 Red — `REFUND` or `CURRENCY` in Remarks
 
 New tabs auto-positioned to leftmost (`updateSheetProperties index=0`).
+
+### Remarks format for hint-matched rows
+
+A row whose SKU is **not** in the supplier's Amount Reference is still kept if a `title_hints` substring appears anywhere in the order — deliberately, because a labelled false positive is cheaper to filter out than a silently missing payout row. The Remarks cell records the evidence so the row can be judged from the sheet alone:
+
+```text
+TITLE MATCH [title:'vitae','vitae precision' vendor:'vitae'] vendor="Vitae Precision" - add to Amount Reference?
+TITLE MATCH WEAK [note:'linford'] vendor="SweetHeart" - add to Amount Reference?
+```
+
+- **Fields that can fire:** `title`, `variant`, `name`, `vendor`, `props`, `note`, `tags`. `name` is only shown when it contributes a hint that `title`/`variant` did not (it is just those two concatenated).
+- **`WEAK`** = the match rests **only** on `note`/`tags` — free-text logistics typed by staff, not product data. Filter Remarks for `TITLE MATCH WEAK` to review these first; they are the main false-positive source (an order note reading *"to be picked up by linford of vitae precision"* pulls SweetHeart items into Vitae's tab).
+- **`vendor="…"`** echoes Shopify's own vendor field — usually the fastest way to tell whose product it really is.
+- Rows whose SKU *is* in the reference but has no price read `TITLE MATCH - ref price pending [ref:<matched sku>]`.
+
+## Auditing a supplier's month
+
+`probe_supplier.py <SupplierName> "<MMM YYYY>"` replays every row of a supplier's monthly tab through the v5 child's exact matcher against the live Shopify orders, and prints — per row — whether it matched the Amount Reference or a title hint, and for hint matches, the exact field and hint text that fired plus Shopify's own `vendor`. Run it on the NAS (it needs the service-account key and Shopify creds that live there):
+
+```bash
+cat probe_supplier.py | ssh <nas> 'cat > /tmp/probe_supplier.py'
+ssh <nas> 'python3 /tmp/probe_supplier.py Vitae "Aug 2026"'
+```
+
+Read-only — it touches no sheet and changes nothing.
 
 ## Knowledge transfer rule
 
