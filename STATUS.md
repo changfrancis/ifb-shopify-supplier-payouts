@@ -1,4 +1,4 @@
-# Status — n8n 2.36.9, retry-hardened; Sept 1 cron failed on a Sheets 503 and was recovered manually
+# Status — Aug 2026 rebuilt clean (271 rows, 0 date errors); n8n 2.36.9, retry-hardened
 
 ## Production state
 
@@ -357,6 +357,69 @@ n8n CLI `execute` cannot share port 5679 with the running container, so:
 **For a clean rebuild** (e.g. after adding excludes or filling in reference prices for a past month): **delete the dest tab first** (`deleteSheet` via Sheets API or manually), then run the procedure above. The workflow will recreate the tab from scratch with the latest config.
 
 Note: workflow only appends. Re-runs do **not** delete previously matched rows that are now excluded — manual deletion required for those.
+
+## Aug 2026 rebuild — 2026-09-02
+
+Re-ran all 8 suppliers after a pre-flight SKU review. **271 rows, $11,784.56 takehome, 0 wrong dates** (22 orders fell in the previously-broken 00:00–07:59 SGT window and all landed correctly).
+
+| Supplier | Rows | Takehome | Flags |
+|---|---:|---:|---|
+| Stan | 1 | $86.00 | clean |
+| Piggy | 4 | $240.00 | clean — **was 4 TITLE MATCH** |
+| Bluebird | 1 | $136.00 | REFUND=1 |
+| Ryan | 117 | $5,976.40 | TITLE MATCH=16, REFUND=5 — **was 124 rows / 23** |
+| Bryan | 14 | $273.00 | clean |
+| Dylan | 14 | $160.90 | TITLE MATCH=1 |
+| Gavin | 115 | $4,391.16 | TITLE MATCH=9, REFUND=7, CANCELLED=1 — **was 119 rows / 13** |
+| Vitae | 5 | $521.10 | TITLE MATCH=5 |
+
+### 1. Piggy's 4 TITLE MATCH rows were an artifact of the Sept 1 recovery run, not a data gap
+
+`pgf-hana-hardware-kit` and `pgf-breacher-hardware-kit` were byte-identical to the reference and matched the workflow's own regex — yet all 4 Piggy rows were flagged, the signature of `Read Amount Reference` returning empty. That run went straight into the Google Sheets flakiness while the node still had `onError: continueRegularOutput` and **no retry**, so it silently produced guesses. This is exactly the failure mode predicted when the retry hardening was added — it had already happened. Rebuild fixes it: 4 → 0 TITLE MATCH, takehome now $240.00 with real fees applied.
+
+### 2. Cross-supplier contamination — $1,029.59 credited to the wrong supplier
+
+Excluded only the **provable** cases (SKU matches a *different* registered supplier's Amount Reference):
+
+| Was on | SKU | Value | Belongs to |
+|---|---|---:|---|
+| Ryan | `sbl2-hwkit-cobaltblue` x2 | $499.62 | Gavin (`sbl2-hwkit-COLOUR`) |
+| Ryan | `bbgb-shark-shus` | $170.00 | Bluebird (`bbgb_shark_shus`) |
+| Ryan | `sbl2-3dparts` | $149.13 | Gavin |
+| Ryan | `dd-kar98k-printed-parts-only` | $106.84 | see the `_`/`-` bug below |
+| Ryan | `gfz20bcar-blue` x2 | $104.00 | Gavin (`gfz20bcar-COLOUR`) |
+| Gavin | `sling-2pt-black-1000d` | $32.23 | Bryan |
+| Gavin | `d2-SBL2-victory-shroud-digital` x2 | $20.25 | Dylan |
+| Gavin | `d2-sbl2ex-longspearshroud-digital` | $9.97 | Dylan |
+
+### 3. Latent bug — `exclude_skus` does NOT do `-`/`_` interchange
+
+The **SKU matcher** treats `-` and `_` as interchangeable; the **exclude matcher** does not — it only handles `*` and case-insensitivity. So Ryan's existing excludes `bbgb_shark_shus` and `DD_kar98k_printed_parts_only` were **silently inert** against the hyphenated SKUs Shopify actually sends. Worked around by adding hyphen forms (recovered another $106.84); the proper fix is to apply the same `[-_]` normalisation used by the SKU matcher.
+
+**Still at risk (underscore form, never matching):** `bbgb_heavy_blue_gels`, `DD_kar98k_printed_parts_assembled`, `bbgb_M870_Remington`, `G_minx`.
+
+### 4. Root cause — title hints match things that do not identify a supplier
+
+Verified against Shopify's `vendor` field. Every mis-attributed row matched on:
+
+- **Colour words** — Ryan's hint `blu` matches "Blue" anywhere: `gfz20bcar-blue`, `sbl2-hwkit-cobaltblue`, `ait-18-mag-blue`, `worker-15-straight-blue`, `storm-404-blue-fullbuild`, "Sky Blue".
+- **Customer property values** — order 6182 matched a colour selection: `Primary (Blue in Product Photos)=Blue`.
+- **Free-text order notes** — `sabre-tdarts-white-red` went to Gavin because a note read *"missed lee enfield metal handle and SBL"*; `diana-cnc-slide-black` went to Vitae because the note was literally `Linford`.
+
+Actual vendors: **SweetHeart, Diamond Dogs, Sabre, Hare Technology, IFB.SG** — none are registered suppliers, and IFB.SG is the house brand. **Decision 2026-09-02:** leave those vendors alone for now, keep Ryan's `blu` hint as-is, fix only provable cases via excludes.
+
+### Still outstanding — 31 units, $4,093.84 unpriced
+
+Genuinely absent from their supplier's reference, so takehome is the full sale price with **no fee deducted** (over-crediting, same as the Gavin issue that cost $272.59 in July):
+
+- **Ryan** — `Heilun Cuckoo - Sky Blue & Light Pink` x5 $1,596.75 · `storm-404-blue-fullbuild` $820 · `Custom 404 Storm | Blue Tube` $820 · `ait-18-mag-blue` x7 $105 · `Ryan Blu ZWQ30 upgrade` $20 · `worker-15-straight-blue` $10. **Confirmed NOT Ryan's** (vendors SweetHeart / IFB.SG / unset) but pending a decision on those vendors.
+- **Gavin** — `GFZ | NEO BCAR 5-Row 7°` x2 $104 · `sabre-tdarts-white-red` $26.86 · `Lalamove for GFZ 4s LiPo` $18 · `GFZ SBL2 Spring` + `gfz sbl2 spring` $24 (**same item, two casings**) · `GFZ parts` $3.13 · `Gavin forehead kiss` $0.00
+- **Vitae** — `vitae folding buttstock-1` $372.10 · `diana-cnc-slide-black` $140 · `storm-mag-magnet` x3 $9
+- **Dylan** — `d2-sbl1-deskmat-3060` $25 (SBL1 variant of the existing `d2-sbl2-deskmat-3060`)
+
+Vitae shows all 5 rows as TITLE MATCH, but this is **not** a read failure — each SKU was tested against the current reference and is genuinely absent. Vitae simply had only 5 rows this month.
+
+Pre-rebuild backups of all 8 tabs: `/tmp/aug2026_backup/` on the NAS (json + csv per supplier).
 
 ## Resolved (was carryover)
 
