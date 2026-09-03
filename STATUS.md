@@ -439,6 +439,39 @@ This is the same vector that pulled Gavin's `sabre-tdarts-white-red` in off a no
 
 Order 6159 is genuinely Linford's but absent from his 51-SKU Amount Reference, so its $372.10 is the Shopify sale price, not an agreed takehome. **Open: needs a reference price.**
 
+### Jul 2026 re-run: Vitae unchanged, Bluebird Walkin takehome bug found (2026-09-03)
+
+Vitae Jul 2026 rebuilt on request: **1 row, `vitae-galaxy`, $300.00 / $280.00, unchanged**. Its date (24 Jul) was already correct despite Jul predating the TZ fix. Nothing to correct.
+
+The re-run also touched the other 7 Jul tabs (dedup no-ops). Six were byte-identical. **Bluebird gained a row**, which turned out to be a genuine miss plus a real bug.
+
+**The row:** `Manual | 1 Jul 2026 | bbgb-shark-shus | $170.00 | $34.00 | (blank) | MANUAL ENTRY` — a manual entry sitting in Bluebird's own source tab that the 1 Aug run never captured. Its takehome came through **blank**, though the source says **$136.00**.
+
+**Root cause — `mapWalkinRow` looked takehome up by a hardcoded header list:**
+
+```javascript
+takehome: gh(r, ['Gavin Amount (Takehome)', 'Piggy Amount (Takehome)', 'Bryan Amount (Takehome)',
+                 'Stan SGD (Takehome)', 'BBSG Amount (Takehome)', 'Dylan Amount (Takehome)'])
+```
+
+Bluebird's header is **`Bluebird Amount (Takehome)`**. It was renamed from `BBSG Amount (Takehome)` at some point and the lookup silently stopped matching. `Listing Price` and `3DPS+Stripe Fee` still mapped, so the row looked *almost* right — the failure mode is a blank cell, not an error.
+
+**Fix — `ghTakehome()`** tries the known names first, then falls back to any header matching `/takehome|take\s*home/i`. A future rename now degrades to still-correct instead of silently empty. `Bluebird Amount (Takehome)` and `Ryan Amount (Takehome)` were also added to the explicit lists. Verified with 9 cases (the Bluebird bug, each already-working supplier, a hypothetical rename, both Ryan header spellings, Vitae's `Linford's `, `row_number` exclusion, and a genuinely-empty cell) — all 9 correct.
+
+**Result — Jul 2026 Bluebird $334.00 → $466.00**, reconciling exactly:
+
+| Change | Δ |
+|---|---:|
+| Manual row takehome: blank → $136.00 | +$136.00 |
+| `bbgb-20kg-hard-gels`: $20.00 → $16.00 | −$4.00 |
+| | **+$132.00** |
+
+The second change is **not** from this fix: `bbgb-20kg-hard-gels` is now the last row of Bluebird's `Gel Amount Reference` at `$20.00 / $4.00 / $16.00`. Bluebird added it after the 1 Aug run, so the rebuild matched it properly and dropped its `TITLE MATCH` flag. Correct behaviour.
+
+**Not established:** whether other suppliers' Walkin takehome ever failed to map. Probing their monthly tabs by plain month name returned empty for most — their `walkin_tab_template` derives different tab names — so the scan could neither confirm nor clear them. The pattern fallback makes the question moot going forward, but **historical months were not audited for this**.
+
+This is exactly the failure the "cross-check manual input rows after every re-run" rule exists to catch.
+
 ### Pricing rules confirmed by the user (2026-09-03)
 
 - **All products are referenced in SGD. Currency conversion is ignored.** Suppliers are paid the SGD figure in their Amount Reference, whatever the customer paid in.
