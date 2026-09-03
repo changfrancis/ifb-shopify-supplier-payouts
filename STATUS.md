@@ -439,6 +439,45 @@ This is the same vector that pulled Gavin's `sabre-tdarts-white-red` in off a no
 
 Order 6159 is genuinely Linford's but absent from his 51-SKU Amount Reference, so its $372.10 is the Shopify sale price, not an agreed takehome. **Open: needs a reference price.**
 
+### Piggy order 5723 refund + two latent flaws found (2026-09-03)
+
+Order 5723 (20 Jul 2026, Nicholas Tan) was **fully refunded $285.00 on 3 Sep 2026**. Piggy had been credited **$90.00** for it in July.
+
+**DECISION (user): do not edit Jul. Transfer the refund to Aug only.** Jul 2026 Piggy stays at **17 rows / $885.00**. Two reversal rows appended to `Aug 2026 Piggy n8n`, flagged `REFUND` (so they render red), dated with the **refund** date not the order date:
+
+| Order | Date | SKU | Listing | Takehome |
+|---|---|---|---:|---:|
+| 5723 | 3 Sep 2026 | `pgf-superdrum-70-prints-assembled` | −$80.00 | −$70.00 |
+| 5723 | 3 Sep 2026 | `pgf-superdrum-hardware` | −$30.00 | −$20.00 |
+
+**Aug 2026 Piggy: $240.00 → $150.00.** Also mirrored into Piggy's own `AI Aug 2026` tab (which was empty) so his copy matches the settlement.
+
+⚠️ **These rows are hand-written into the generated tab and will be lost if `Aug 2026 Piggy n8n` is ever rebuilt.** Gavin's Fedex deductions avoid this by living in his own sheet and flowing through each run — that route does not work for Piggy while the tab-name mismatch below persists.
+
+#### Flaw 1 — line items with NO SKU are silently dropped (all suppliers)
+
+Order 5723 had a **third** Piggy item the sync never captured: Shopify line `Ontos Legends Custom Full Build - Burnt Titanium & Metallic Red`, $180.00, with **empty `sku` and empty `vendor`**. Piggy's reference has `pgf-ontos-legends-fullbuild` ($200/$20/$180) but with no SKU there is nothing to match, and his hints (`piggy,piggyfoam,pgf,piggy foam`) appear nowhere in the title, vendor, note or tags. `findMaster('')` returns null and no hint fires, so the row vanished with no flag.
+
+Piggy's own sheet records it at $180.00 / $9.00 / **$171.00**.
+
+**It nets to zero here** — he was never credited the $171, and the order was refunded, so nothing is owed either way. A Jul credit + Aug offset was applied and then reverted at the user's instruction; verified Jul+Aug total is unchanged at $1,035.00 on both paths.
+
+**But the flaw is general and dangerous:** custom/manual builds are exactly the high-value items most likely to lack a SKU. **Open — candidate fix:** widen Piggy's `title_hints` to his product families (`ontos,superdrum,breacher,fenrir,wolver,stagecoach,masterkey,hana`), which is the architecturally correct place (per-supplier behaviour as Registry data), and is now safe to do because hint matches record their evidence and label weak ones.
+
+#### Flaw 2 — Piggy's Walkin source has not been read since May 2026
+
+`walkin_tab_template` is `LLL yyyy`, so the workflow looks for `Aug 2026` / `Jul 2026`. His actual tabs:
+
+```
+Piggy Amount Reference · AI Aug 2026 · AI July 2026 · July 2026 · AI June 2026 · June 2026 · May 2026 · AI Apr 2026 · Mar 2026 · Feb 2026 · Jan 2026 · Dec 2025 · Nov 2025
+```
+
+Three naming schemes (`AI` + `LLL`, `AI` + `LLLL`, bare `LLL`/`LLLL`), and **two tabs for June and July with different contents**. Only `May 2026` and earlier match. **Apr, Jun, Jul and Aug read nothing** — the silent tab-name mismatch failure mode.
+
+**No single Luxon template can match them.** Fixing it needs either his tabs renamed consistently (blocked: which of `AI July 2026` / `July 2026` is authoritative?) or multi-candidate tab resolution in the parent, which needs a tab-existence lookup it does not currently do. **Open — needs the user to decide which tab is authoritative per month.**
+
+Note the Walkin rows would *also* be dropped by `walkin_deduped_against_shopify` even with the name fixed, since order 5723 is in the Shopify pull — so his sheet cannot currently rescue a SKU-less line item either. Flaw 1 has to be fixed at the matcher.
+
 ### Jul 2026 re-run: Vitae unchanged, Bluebird Walkin takehome bug found (2026-09-03)
 
 Vitae Jul 2026 rebuilt on request: **1 row, `vitae-galaxy`, $300.00 / $280.00, unchanged**. Its date (24 Jul) was already correct despite Jul predating the TZ fix. Nothing to correct.
