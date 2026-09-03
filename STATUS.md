@@ -464,6 +464,40 @@ Fee is 10% of listing, floored to whole dollars — **except 11 rows at $210 and
 
 $75 of fees per unit sold across those 11 SKUs. One row goes the other way: `vitae-mystery-knob` is $30 listing / $5 fee (10% = $3). **Open: confirm with Linford whether the $20 is a real agreement on higher-value pieces or a stale hand-entry.**
 
+### 'NO SALE THIS MONTH' placeholder fired on re-runs (fixed 2026-09-03)
+
+Found by re-running the Aug 2026 parent over already-populated tabs: **7 of 8 tabs gained a junk `NO SALE THIS MONTH` row**, takehome unaffected ($0.00 rows).
+
+The guard was `if (orderedRows.length === 0)`. That array is empty in **two** situations and only one is a genuine no-sale month — on a re-run every row dedups away, so it is empty while the tab is actually full. Fixed by additionally requiring the destination to be empty:
+
+```javascript
+if (orderedRows.length === 0) {
+  if (existingRows.length > 0) return [];   // re-run over a populated tab, not a no-sale month
+  ...
+}
+```
+
+**Not new.** A sweep of Mar–Aug found **11** stray rows: 7 from the 2026-09-03 re-run and **4 from Jun 2026** (Stan, Piggy, Bluebird, Vitae), dating to the 2026-06-29/30 targeted rebuilds. All 11 deleted after verifying each row was the placeholder and that real rows remained. `Mar 2026 Bluebird` keeps its placeholder — it is that tab's only row, which is what the feature is for.
+
+**Sheets API 429.** The first purge attempt was rate-limited mid-scan (48 tab reads on top of a verification pass; the quota is ~60 reads/min/user). It failed **before any deletion**. Redone as a targeted purge of the 11 known rows with exponential backoff and a 1.2s inter-call pause. Worth remembering for any future full-sheet sweep.
+
+### Vitae Aug 2026 rebuilt (2026-09-03)
+
+User confirmed `diana-cnc-slide-black` and `storm-mag-magnet` are **not Vitae's**. Both added to his `exclude_skus`; tab deleted and rebuilt.
+
+| | Before | After |
+|---|---:|---:|
+| Rows | 5 | **1** |
+| Takehome | $521.10 | **$372.10** |
+
+Jul 2026 Vitae re-audited at the same time: **clean** — 1 row, `vitae-galaxy`, matched his reference at the SGD $300 (the customer paid CAD 347; the reference price correctly won). No change needed.
+
+Remaining row is the buttstock, still carrying the FX-inflated **$372.10** because it is not in his Amount Reference. **Open: add it at $350** (fee $35, takehome $315) — his sheet, awaiting the user's go-ahead.
+
+Backup of the pre-rebuild tab: `/tmp/vitae_aug_backup/` on the NAS.
+
+**Still outstanding:** Gavin's `Lalamove for GFZ 4s LiPo` **$18.00** row is still present in `Aug 2026 Gavin n8n`. The shipping filter prevents it being re-added but cannot remove what is already there — that needs either a single-row delete or a Gavin tab rebuild.
+
 ### Shipping is not supplier revenue (2026-09-03)
 
 `isShippingCharge()` in the v5 child drops courier/delivery line items **when they are only a hint match**. A shipping SKU the supplier has explicitly priced in their Amount Reference is kept — that is a deliberate agreement, not a false positive.
