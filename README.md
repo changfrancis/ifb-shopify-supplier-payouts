@@ -65,6 +65,12 @@ Conditional formatting applied automatically inside the workflow (no post-run sc
 
 New tabs auto-positioned to leftmost (`updateSheetProperties index=0`).
 
+### Pricing rules
+
+- **All products are referenced in SGD; currency conversion is ignored.** A supplier is paid the SGD figure in their Amount Reference regardless of what the customer paid in. Note `o.currency` is Shopify's *shop* currency (always `SGD`) — the customer's is `o.presentment_currency`. The `CURRENCY:` flag therefore never fires, and that is intentional.
+- **Product sale fee = 10%.** Labour/service jobs are **TBC** — no fee assigned.
+- **Shipping is never supplier revenue.** Courier/delivery line items are dropped when they are only a hint match; a shipping SKU explicitly priced in a supplier's Amount Reference is kept. Order-level shipping was never included — the workflow reads `line_items` only, never `shipping_lines` or `total_price`.
+
 ### Remarks format for hint-matched rows
 
 A row whose SKU is **not** in the supplier's Amount Reference is still kept if a `title_hints` substring appears anywhere in the order — deliberately, because a labelled false positive is cheaper to filter out than a silently missing payout row. The Remarks cell records the evidence so the row can be judged from the sheet alone:

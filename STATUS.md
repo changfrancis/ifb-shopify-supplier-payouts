@@ -1,4 +1,4 @@
-# Status — hint matches now record WHY in Remarks; Aug 2026 supplier-by-supplier review started (Vitae done)
+# Status — SGD-reference pricing + 10% product fee confirmed; shipping excluded; hint matches record WHY (Vitae reviewed)
 
 ## Production state
 
@@ -140,6 +140,7 @@ Standalone workflow that auto-shares Google Drive release folders (e.g. Mega Bar
 
 - SKU matching with `_↔-` interchangeable + `COLOUR`/`XXX` wildcards
 - Title hints checked across `title`, `variant_title`, `name`, `vendor`, `properties` (PII-filtered: skip emails/phone/address fields), `o.note`, `o.tags`
+- **NEW (2026-09-03)**: courier/delivery line items (`lalamove`, `fedex`, `shipping`, `delivery fee`, …) are skipped when they are **only** a hint match — shipping is never supplier revenue. A shipping SKU the supplier has explicitly priced in their own Amount Reference is kept
 - **NEW (2026-09-03)**: a hint match records *which field and which hint* fired, in Remarks — `TITLE MATCH [note:'linford'] vendor="SweetHeart" - add to Amount Reference?`. A match resting **only** on `note`/`tags` is labelled `TITLE MATCH WEAK`. See "Hint matches now say why" below
 - `exclude_skus` checks the same fallback used for SKU column (li.sku || li.title || li.name)
 - UNDERPRICED check gated on currency=SGD
@@ -437,6 +438,41 @@ Every Aug 2026 Vitae row was replayed through the workflow's exact matcher again
 This is the same vector that pulled Gavin's `sabre-tdarts-white-red` in off a note mentioning "SBL". It is a **general** flaw, not a Vitae one.
 
 Order 6159 is genuinely Linford's but absent from his 51-SKU Amount Reference, so its $372.10 is the Shopify sale price, not an agreed takehome. **Open: needs a reference price.**
+
+### Pricing rules confirmed by the user (2026-09-03)
+
+- **All products are referenced in SGD. Currency conversion is ignored.** Suppliers are paid the SGD figure in their Amount Reference, whatever the customer paid in.
+- **Product sale fee = 10%.** Labour/service jobs (e.g. Linford's barrel machining) are **TBC** — do not assign a fee.
+- **Shipping is never included in the extract** as supplier revenue.
+
+**Do NOT "fix" the currency check.** `o.currency` is Shopify's *shop* currency and is always `SGD`, so the `CURRENCY:` flag has never fired on any order since the workflow was built — the customer's currency is `o.presentment_currency`. This looks like a bug and was investigated as one, but per the rule above it is the **desired** behaviour: FX is irrelevant to payouts. Left as-is deliberately.
+
+Why it surfaced: order 6159's buttstock showed `$372.10` against a `$350.00` Shopify list price. It was a US order — customer paid **USD 293.00**, settled as SGD 372.10 (Shopify market adjustment + FX). Same signature across `vitae-galaxy` (CAD 347 → $318.28), `vitae-aeb-grip-03-jatoba` (GBP 130 → $222.82), `vitae-aeb-grip-02-osage` (AUD 199 → $181.00), `vitae-purple-maple` (CAD 80 → $74.77), plus `city-r-brace` and `zius-bk2s-buttstock`. All ~6% over SGD list.
+
+**Consequence to remember:** SKUs *in* an Amount Reference are unaffected — they are paid the reference amount (`vitae-galaxy` sold for $318.28, Linford correctly got $280). Only **title-match rows have no reference**, so they take the raw Shopify SGD figure and can be FX-inflated by ~6%. That is what made the buttstock read $372.10 instead of $350.
+
+### Vitae fee schedule, derived from all 51 priced reference rows
+
+Fee is 10% of listing, floored to whole dollars — **except 11 rows at $210 and above, which are all flat $20**:
+
+| SKU | Listing | Fee charged | 10% would be |
+|---|---:|---:|---:|
+| `vitae-tiger-koa`, `-azure-blush`, `-black-pink`, `-galaxy`, `-nebula-blue`, `-turqoise-jade` | $300 | $20 | $30 |
+| `vitae-aeb-grip-07-blackwood` | $250 | $20 | $25 |
+| `vitae-aeb-grip-05-purpleheart`, `-06-ebony` | $240 | $20 | $24 |
+| `vitae-aeb-grip-03-jatoba`, `-04-redheart` | $210 | $20 | $21 |
+
+$75 of fees per unit sold across those 11 SKUs. One row goes the other way: `vitae-mystery-knob` is $30 listing / $5 fee (10% = $3). **Open: confirm with Linford whether the $20 is a real agreement on higher-value pieces or a stale hand-entry.**
+
+### Shipping is not supplier revenue (2026-09-03)
+
+`isShippingCharge()` in the v5 child drops courier/delivery line items **when they are only a hint match**. A shipping SKU the supplier has explicitly priced in their Amount Reference is kept — that is a deliberate agreement, not a false positive.
+
+Found by scanning Apr–Aug across all 8 suppliers. Exactly **one** offender: `Lalamove for GFZ 4s LiPo` (order 6194, Aug 2026), a courier fee credited to Gavin as **$18.00** of product revenue because the title contains `gfz`.
+
+Safety-checked before deploy: **0 of 246** Amount Reference SKUs and **1 of 275** distinct Shopify SKUs affected — the Lalamove line, nothing else.
+
+**Gavin's 87 Walkin Fedex rows are deliberately untouched.** Those are `$0.00` listing / negative takehome entries (`-$36.79`, remarks `Fedex 870770846133`) that Gavin records in his *own* sheet as deductions from his payout — **-$4,379.33** across Apr–Aug. They are shipping *costs he absorbs*, not revenue. The filter only runs against Shopify line items; Walkin rows are processed further down and never reach it. Dropping them would overpay Gavin by $4,379.33.
 
 ### Hint matches now say why (2026-09-03)
 
