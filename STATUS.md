@@ -488,11 +488,15 @@ User confirmed `diana-cnc-slide-black` and `storm-mag-magnet` are **not Vitae's*
 | | Before | After |
 |---|---:|---:|
 | Rows | 5 | **1** |
-| Takehome | $521.10 | **$372.10** |
+| Takehome | $521.10 | **$315.00** |
 
 Jul 2026 Vitae re-audited at the same time: **clean** — 1 row, `vitae-galaxy`, matched his reference at the SGD $300 (the customer paid CAD 347; the reference price correctly won). No change needed.
 
-Remaining row is the buttstock, still carrying the FX-inflated **$372.10** because it is not in his Amount Reference. **Open: add it at $350** (fee $35, takehome $315) — his sheet, awaiting the user's go-ahead.
+**Buttstock resolved.** The rebuild alone could not fix its `$372.10` — with no reference row the workflow has nothing to price against and falls back to the Shopify SGD figure, which is the FX-inflated one from that USD order. Appended `vitae folding buttstock-1 | $350.00 | $35.00 | $315.00` to row 53 of `Vitae Amount Reference ` (append only, nothing overwritten) and rebuilt again. The row is now **$350.00 / $315.00 and carries no flag at all** — it matches the reference, so the SGD price wins, exactly as `vitae-galaxy` does.
+
+**Final: Vitae Aug 2026 = 1 row, $315.00** (was 5 rows / $521.10).
+
+The placeholder fix was confirmed by this second re-run: seven populated tabs, **zero** stray `NO SALE` rows added.
 
 Backup of the pre-rebuild tab: `/tmp/vitae_aug_backup/` on the NAS.
 
