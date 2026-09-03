@@ -500,7 +500,7 @@ The placeholder fix was confirmed by this second re-run: seven populated tabs, *
 
 Backup of the pre-rebuild tab: `/tmp/vitae_aug_backup/` on the NAS.
 
-**Still outstanding:** Gavin's `Lalamove for GFZ 4s LiPo` **$18.00** row is still present in `Aug 2026 Gavin n8n`. The shipping filter prevents it being re-added but cannot remove what is already there — that needs either a single-row delete or a Gavin tab rebuild.
+**DECISION (user, 2026-09-03): leave Gavin's `Lalamove for GFZ 4s LiPo` $18.00 row in `Aug 2026 Gavin n8n`.** The shipping filter prevents it being re-added but cannot remove what is already there, and the user chose not to delete it for Aug. Aug's Gavin total therefore includes $18.00 of courier fee **by decision, not by oversight** — do not "fix" it retroactively. From Sep 2026 onward the filter keeps courier lines out at source.
 
 ### Shipping is not supplier revenue (2026-09-03)
 
