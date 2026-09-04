@@ -1,4 +1,4 @@
-# Status — SGD-reference pricing + 10% product fee confirmed; shipping excluded; hint matches record WHY (Vitae reviewed)
+# Status — Aug 2026 rebuilt across all 8 (268 rows, $11,470.46); hint matches record WHY; n8n verified in sync
 
 ## Production state
 
@@ -439,6 +439,47 @@ This is the same vector that pulled Gavin's `sabre-tdarts-white-red` in off a no
 
 Order 6159 is genuinely Linford's but absent from his 51-SKU Amount Reference, so its $372.10 is the Shopify sale price, not an agreed takehome. **Open: needs a reference price.**
 
+### Aug 2026 full rebuild — all 8 suppliers (2026-09-04)
+
+All eight Aug tabs deleted and rebuilt so every row carries the new hint-evidence Remarks. Backups: `/tmp/Aug_2026_rebuild/` on the NAS (json + csv + `_snapshot.json`).
+
+| Supplier | Rows | Takehome | Δ | Flags |
+|---|---:|---:|---:|---|
+| Stan | 1 | $86.00 | — | clean |
+| Piggy | 6 | $150.00 | — | REFUND=2 |
+| Bluebird | 1 | $136.00 | — | REFUND=1 |
+| Ryan | 117 | $5,976.40 | — | TITLE MATCH=16, REFUND=5 |
+| Bryan | 14 | $273.00 | — | clean |
+| Dylan | 14 | $160.90 | — | TITLE MATCH=1 |
+| Gavin | 114 | $4,373.16 | **−$18.00** | TITLE MATCH=7, **WEAK=1**, REFUND=7 |
+| Vitae | 1 | $315.00 | — | clean |
+| **Total** | **268** | **$11,470.46** | **−$18.00** | |
+
+**The only monetary change is Gavin's `Lalamove for GFZ 4s LiPo` $18.00**, dropped by the shipping filter. This **overrides the 2026-09-03 decision to leave it in Aug** — that decision predates the full rebuild and the row is now gone. Re-add it manually if the $18 should stand.
+
+**Piggy's two refund rows do not survive a rebuild** — they were destroyed by the tab delete and re-appended afterwards. Any future Aug Piggy rebuild must do the same until flaw 2 is fixed.
+
+Placeholder guard held: zero stray `NO SALE THIS MONTH` rows across all 8 freshly-built tabs.
+
+#### The evidence labels in production
+
+**Ryan's 16 title matches are entirely the `blu` hint**, and Shopify's vendor field gives them away:
+
+| Order | SKU | $ | Matched on | Vendor |
+|---|---|---:|---|---|
+| 6084 | `Heilun Cuckoo - Sky Blue & Light Pink` ×5 | 1,596.75 | `title:'blu'` | — |
+| 5993 | `storm-404-blue-fullbuild` | 820.00 | `variant:'blu' note:'blu'` | **SweetHeart** |
+| 6166 | `Custom 404 Storm \| Blue Tube` | 820.00 | `title:'blu'` | — |
+| 6075/6177/6196/6219 | `ait-18-mag-blue` ×7 | 105.00 | `variant:'blu'` | **IFB.SG** |
+| 6142 | `Ryan Blu ZWQ30 upgrade` | 20.00 | `title:'blu'` | — |
+| 6191 | `worker-15-straight-blue` | 10.00 | `variant:'blu'` | **Worker** |
+
+**$3,371.75 of Ryan's $5,976.40 hangs on the word "Blue"** — all previously confirmed by the user as not his. The user chose to keep the `blu` hint and rely on excludes, so these stay until excluded.
+
+**Exactly one `WEAK` row in the whole month:** Gavin's `sabre-tdarts-white-red` $26.86, `note:'sbl'`, vendor **Sabre**. The order-note false-positive vector produced one row in August.
+
+Gavin's other 6 are genuine GFZ items simply absent from his reference (`GFZ | NEO BCAR 5-Row 7°` ×2, `GFZ SBL2 Spring` ×3 across two casings, `GFZ parts`).
+
 ### Piggy order 5723 refund + two latent flaws found (2026-09-03)
 
 Order 5723 (20 Jul 2026, Nicholas Tan) was **fully refunded $285.00 on 3 Sep 2026**. Piggy had been credited **$90.00** for it in July.
@@ -450,7 +491,9 @@ Order 5723 (20 Jul 2026, Nicholas Tan) was **fully refunded $285.00 on 3 Sep 202
 | 5723 | 3 Sep 2026 | `pgf-superdrum-70-prints-assembled` | −$80.00 | −$70.00 |
 | 5723 | 3 Sep 2026 | `pgf-superdrum-hardware` | −$30.00 | −$20.00 |
 
-**Aug 2026 Piggy: $240.00 → $150.00.** Also mirrored into Piggy's own `AI Aug 2026` tab (which was empty) so his copy matches the settlement.
+**Aug 2026 Piggy: $240.00 → $150.00.**
+
+**Correction (verified 2026-09-04):** the mirror into Piggy's own `AI Aug 2026` tab is **not** in place — that tab currently holds **0 rows**. Only the generated `Aug 2026 Piggy n8n` carries the reversal. Jul was re-verified as genuinely untouched at **17 rows / $885.00** with no ontos row present.
 
 ⚠️ **These rows are hand-written into the generated tab and will be lost if `Aug 2026 Piggy n8n` is ever rebuilt.** Gavin's Fedex deductions avoid this by living in his own sheet and flowing through each run — that route does not work for Piggy while the tab-name mismatch below persists.
 
