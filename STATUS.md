@@ -1,6 +1,58 @@
-# Status — Aug 2026 rebuilt across all 8 (268 rows, $11,470.46); hint matches record WHY; n8n verified in sync
+# Status — pre-Oct-1 sweep done; Ryan silver BCAR added; n8n 25 releases behind (upgrade deferred on purpose)
 
 ## Production state
+
+### Pre-Oct-1 sweep: software + SKU (2026-09-26/27)
+
+**Software.** n8n **2.36.9 is 25 releases behind** — latest 2.x is **2.41.3** (25 Sep), with 2.40.7 on the parallel line. **Deliberately NOT upgraded before Oct 1:** that cron is the first validation of the retry hardening and the TZ-safe dates, and Sept 1 already failed once on a Sheets 503. A five-version jump beforehand would make any failure ambiguous. Upgrade the day after Oct 1 succeeds.
+
+**Live bug found — n8n's insights pruning is failing**, 336 times in 7 days, exactly 2/hour:
+
+```
+Pruning old insights data
+SQLITE_CONSTRAINT: FOREIGN KEY constraint failed
+```
+
+Internal to n8n, not our workflows, and payout data is unaffected — but insights rows are **never pruned**, compounding the existing DB bloat (`IfbOrdersToSheet1` holds 946 MB of 1.09 GB). Check whether 2.41.3 fixes it. Separately, `EmailReqToDash1`'s IMAP trigger keeps dropping and self-reactivating (not this repo's workflow). Host healthy: disk 3% (181 GB / 7 TB), 21 days uptime, all 15 containers up.
+
+**SKU.** Reference sizes: Stan 2, Piggy 28, Bluebird 7, Ryan 54→**55**, Bryan 12, Dylan 55, Gavin 38, Vitae 52. **No supplier added a SKU since the Aug run** — all 13 of August's TITLE MATCH SKUs were re-tested against the current references and none resolve, so rebuilding Aug would change nothing. Dylan has one reference row with no price: `d2_s400_QDhwkit_old`.
+
+**Sep 2026 pre-flight** (309 orders): ~$8,647 projected. Ryan 111 rows/$3,742.59 · Gavin 90/$3,353.92 · Vitae 14/$546.85 · Bluebird 3/$408 · Piggy 9/$390 · Dylan 11/$95.80 · Bryan 5/$75 · Stan 1/$35.
+
+Contaminations that will land on Oct 1 unless excluded — **all still outstanding**:
+
+| Lands on | SKU | $ | Vendor says |
+|---|---|---:|---|
+| Ryan | `MegaSMC-3dparts-BRT-wassembly` | 180.00 | **GFZ** |
+| Ryan | `dd-kar98k-printed-parts-assembled` | 130.00 | **Diamond Dogs** |
+| Ryan | `gfz-smiley-bolt-blue` | 19.75 | **GFZ** |
+| Ryan | `ait-18-mag-blue` ×3 | 45.00 | IFB.SG (confirmed not his) |
+| Ryan | `worker-15-straight-blue` ×2 | 20.00 | Worker (confirmed not his) |
+| Vitae | `hc-16-mag-clear` ×8 | 96.00 | **Hare Technology** — `note:'linford'`, same vector as Aug |
+| Gavin | `berry-dart-800`, `cockroach-sight` | 99.63 | IFB.SG — `note:'gfz'` |
+| Dylan | `sling-qd-pic-mount` | 10.00 | IFB.SG — `note:'dylan'` |
+
+`dd-kar98k-printed-parts-assembled` is the latent case flagged in August: the existing exclude covers `..._printed_parts_only` but not `_assembled`.
+
+### Ryan's Aerial BCAR — two prices in one month (2026-09-27)
+
+`zwq-aerial-black-blu` sold at **$55.00 ×4** (3, 14, 21 Sep) then **$65.00 ×6** (21–24 Sep) — a real price rise mid-day on **21 Sep**, plus two FX orders at $58.59/$59.60. Same on orange ($65 ×2) and silver ($65 ×1): **21 Aerial units in September, 9 at the new price.**
+
+**The workflow cannot represent this.** The reference holds one price per SKU, and it wins whenever Shopify is at or above it — the UNDERPRICED check is the *only* override and fires only below. So **all 6 black units at $65 pay Ryan $45.60, identical to the $55 units**; the extra $10 each accrues to IFB. A duplicate reference row does not help: `findMaster` returns the **first** match and never reads the second.
+
+Setting the reference to $65 is *not* a safe fix either — the four $55 sales would flag UNDERPRICED and be paid on their actual price, and so would the FX orders, paying Ryan on the FX-inflated SGD figure. That violates the SGD-reference rule. **Recommended: leave the reference at $55 for September, hand-adjust the 9 rows at $65 after the cron, then set $65 for October.** Blocked on the user supplying Ryan's takehome at $65.
+
+**Root limitation: the Amount Reference has no effective-date column.** One price per SKU cannot describe a month spanning a price change, so every such month needs manual correction. A `valid_from` column would be the real fix — schema + workflow change, not a data edit. Not scoped.
+
+#### DONE: `zwq-aerial-silver-blu` added
+
+It was **worse than unpriced — silently dropped**. Absent from the reference, and no title hint fires: Ryan's hints are `blu, accublu, dtb, holster, molle`, and none appear in the title (*"ZWQ | Aerial BCAR 5° Twist"*), variant (*"Silver"*) or vendor (*"ZWQ"*). **The `blu` in the SKU does not count — hints never inspect the SKU field.** 3 units / $175 would have vanished with no flag.
+
+Appended at `Ryan Amount Reference `!A56 as **$55.00 / $9.40 / $45.60**, copied verbatim from `zwq-aerial-black-blu` and `zwq-aerial-orange-blu` (the script aborts unless both exist and agree). Colour variants share pricing throughout Ryan's reference, e.g. `zwq16bcarV2-orange/black/silver/grey` are all $40.00/$6.86/$33.14.
+
+Verified: Ryan 107 rows/$3,590.79 → **111 rows/$3,742.59**, reconciling exactly as 3 × $45.60 = $136.80 plus $15.00 from a new `ait-18-mag-blue` in two orders that arrived between the two runs.
+
+**Worth considering:** replacing the three explicit aerial rows with `zwq-aerial-COLOUR-blu` would cover every future colour automatically and stop the next one vanishing the same way. Not done — it edits existing rows, and Ryan's reference uses explicit per-colour rows by convention.
 
 Single canonical workflow (v5) handles all 8 suppliers via Suppliers Registry. v4 retired.
 
