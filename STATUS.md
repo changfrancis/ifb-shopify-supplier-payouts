@@ -1,6 +1,49 @@
-# Status — pre-Oct-1 sweep done; Ryan silver BCAR added; n8n 25 releases behind (upgrade deferred on purpose)
+# Status — Oct 1 cron verified (Sep 2026: 292 rows, $8,990.50); Manual-row dedup bug fixed; write-failure alerting still open
 
 ## Production state
+
+### Oct 1 2026 cron — Sep 2026 (verified 2026-10-01)
+
+**Final Sep 2026: 292 rows, $8,990.50, 0 issues** against an independent replay of the matcher over all 359 Sep orders (`verify_month_output.py "Sep 2026"`).
+
+| Supplier | Rows | Takehome | Notes |
+|---|---:|---:|---|
+| Stan | 3 | $139.82 | 3 unpriced, no Shopify SKUs |
+| Piggy | 11 | $460.00 | clean |
+| Bluebird | 5 | $472.00 | 2 WEAK |
+| Ryan | 126 | $4,232.98 | rebuilt; Aerial BCAR hand-corrected (below) |
+| Bryan | 5 | $75.00 | clean |
+| Dylan | 13 | $115.80 | 1 WEAK |
+| Gavin | 110 | $2,688.13 | 12 Fedex deductions |
+| Vitae | 19 | $806.77 | 12 WEAK, 1 manual |
+
+All 9 executions (parent `7624` + 8 children) reported **success**, started 02:00:00 SGT, 518s. **First full month on the TZ fix: 153/153 then 278/278 Shopify-row dates correct.**
+
+#### Ryan's tab was EMPTY despite "success" — monitoring gap, STILL OPEN
+
+Two Sheets calls timed out and retries (3 x) were exhausted at ~131s each: Stan's `Read Amount Reference` and **Ryan's `Append Rows to Month Tab`**. `onError: continueRegularOutput` turned each into an error item and carried on; the Run Log reported `rows_built=126 status=success` because it counts rows *built*, not rows *written*; and the error handler never fired because nothing "failed". **A failed write is reported as success.** Stan was unaffected in practice (his 3 items have no Shopify SKU, so they title-match either way). Ryan was rebuilt the same day. **Fix still to do:** make a failed append fail the child (or have the Run Log check the append result) so it alerts.
+
+#### Ryan's Aerial BCAR — user's pricing rule, applied by hand
+
+User, 2026-10-01: promo price from launch until **21 Sep 18:10 SGT**; MSRP after. **Orders before #6464: IFB $9.40, takehome $45.60. #6464 onward: IFB $9.71, takehome $55.29.** Listing Price = the actual Shopify sale value. (The user's message put #6464 on both sides; #6464 was charged $65.00 and $9.71 + $55.29 = $65.00, so it is MSRP.)
+
+25 Aerial rows rewritten: 13 promo, 12 MSRP, **+$116.28** to Ryan. FX promo orders show their real SGD sale value (e.g. $58.59) with listing exceeding fee + takehome by the FX difference, as instructed. Ryan's reference rows for black / orange / silver moved to **$65.00 / $9.71 / $55.29**, so October onward needs no correction.
+
+**#6423 is flagged VERIFY in its Remarks:** promo by order number (created 17 Sep) but charged **$65.00**; last updated 30 Sep, consistent with the line being added after the price change. Applied the order-number rule literally ($45.60); one-row decision for the user.
+
+⚠️ **These are hand edits.** A delete-and-rebuild of Sep Ryan reverts them — and with the reference now at $65, promo rows would come back UNDERPRICED at $45.29. Re-apply with `corrections/2026-09_ryan_aerial_bcar.py --apply` (idempotent). A plain re-run over the populated tab is safe: dedup keys on order + SKU and leaves them alone (verified twice).
+
+#### Bug: every re-run duplicated Manual entries — FIXED
+
+Re-running Sep put a second copy of Vitae's `Manual | 2 Sep 2026 | -$44.08` into his tab. Google returns a currency cell as a **number**; the existing-row key used `String(-44.08)` = `-44.08` while the incoming key used `toSgdStr(-44.08)` = `$-44.08`. Never equal, so **every re-run over a populated tab re-appended every `Manual` entry**. Gavin's deductions escaped only because they are `Walkin` rows, keyed without amounts. Fixed with `normAmt()` — both sides compare `parsePrice(v).toFixed(2)`; 8/8 spellings verified. **Proven in production:** a full re-run over all 8 populated tabs added nothing.
+
+#### Bug: Vitae manual rows lost Name and SKU — FIXED
+
+Linford's `Sep 26` tab uses the standard 12-column headers, but his `walkin_format` is `vitae`, which only knew `Customer Name` / `Item Name` — so `Sorrarat Kanhiranbhokin` / `Shipping Thailand` arrived blank (takehome survived via the `ghTakehome` fallback). The `vitae` mapper now accepts both header sets.
+
+#### Found while generalising the verifier: Aug Ryan missed a silver Aerial
+
+`verify_month_output.py "Aug 2026"` shows Aug order **#6172 `zwq-aerial-silver-blu`** absent from Ryan's Aug tab — silently dropped, as in Sep, because silver was not in his reference until 27 Sep. **Ryan is owed $45.60** (August was promo period). Not corrected — awaiting the user's call on where it goes. The verifier's other Aug flags are expected: Piggy's two order-5723 refund reversals (a July order, deliberately transferred into Aug).
 
 ### Pre-Oct-1 sweep: software + SKU (2026-09-26/27)
 

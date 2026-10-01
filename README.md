@@ -96,6 +96,12 @@ ssh <nas> 'python3 /tmp/probe_supplier.py Vitae "Aug 2026"'
 
 Read-only — it touches no sheet and changes nothing.
 
+## Verifying a month after the cron
+
+`verify_month_output.py "<MMM YYYY>"` (run on the NAS, read-only) replays the matcher over every Shopify order in the month and compares the multiset of (order, SKU) units with what each supplier tab actually holds. It also checks every Shopify row's date against the order's real SGT date, flags rows from orders outside the month, stray `NO SALE` placeholders, courier lines credited as revenue, and compares manual/Walkin rows against each supplier's own month tab. Run it after every cron — the Run Log alone reported success on Oct 1 while Ryan's tab was empty.
+
+`corrections/` holds one-off, idempotent scripts for hand corrections the workflow cannot express (e.g. a mid-month price change). Re-apply them after any delete-and-rebuild of that month.
+
 ## Knowledge transfer rule
 
 v4 and v5 share one canonical pipeline; only data sources differ. **Any fix to match/transform logic must be applied to both workflows in the same change set.** Per-supplier oddities (different tab format, date format, column layout) are expressed as Registry data, never as forked code. See [feedback_workflow_knowledge_transfer.md](https://github.com/changfrancis/ifb-shopify-supplier-payouts) (in the agent memory, not this repo).
