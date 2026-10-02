@@ -2,6 +2,10 @@
 
 ## Production state
 
+### Ryan excludes added for Oct 2026 onward (2026-10-02)
+
+User confirmed **ait-18-mag-blue** and **b6neo-charger-redblue** (both vendor IFB.SG) do not belong to Ryan; both pulled in by the blu hint on the variant (Blue / Red-Blue). Added to his exclude_skus (30 -> 32, verified by read-back). Effective from the Nov 1 cron. One Oct sale of the charger ($48.00) is already excluded. **September deliberately left as-is** per the user (next month only): Sep Ryan still credits 5 x ait-18-mag-blue ($75.00) and 7 x b6neo-charger-redblue ($339.63). Removing them would mean deleting those 12 rows, not rebuilding, so the hand-corrected Aerial rows survive.
+
 ### Oct 1 2026 cron — Sep 2026 (verified 2026-10-01)
 
 **Final Sep 2026: 292 rows, $8,990.50, 0 issues** against an independent replay of the matcher over all 359 Sep orders (`verify_month_output.py "Sep 2026"`).
